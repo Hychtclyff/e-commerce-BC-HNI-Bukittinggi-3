@@ -1,0 +1,295 @@
+@import "tailwindcss";
+@import "@heroui/styles";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme {
+	--font-sans: var(--font-sans), sans-serif;
+	--font-mono: var(--font-mono), monospace;
+
+	/* Surface & Base */
+	--color-canvas: var(--canvas);
+	--color-surface: var(--surface);
+
+	/* Structure & Borders */
+	--color-border-subtle: var(--border-subtle);
+	--color-text-primary: var(--text-primary);
+	--color-text-muted: var(--text-muted);
+
+	/* Action & Accent */
+	--color-primary-sage: var(--primary-sage);
+	--color-primary-dark: var(--primary-dark);
+	--color-accent-gold: var(--accent-gold);
+
+	/* Feedback Semantic */
+	--color-status-success: var(--status-success);
+	--color-status-warning: var(--status-warning);
+	--color-status-danger: var(--status-danger);
+
+	/* Badge Semantic Tokens */
+	--color-badge-primary-bg: var(--badge-primary-bg);
+	--color-badge-primary-text: var(--badge-primary-text);
+	--color-badge-primary-border: var(--badge-primary-border);
+	--color-badge-secondary-bg: var(--badge-secondary-bg);
+	--color-badge-secondary-text: var(--badge-secondary-text);
+	--color-badge-secondary-border: var(--badge-secondary-border);
+	--color-badge-success-bg: var(--badge-success-bg);
+	--color-badge-warning-bg: var(--badge-warning-bg);
+	--color-badge-danger-bg: var(--badge-danger-bg);
+}
+
+/* 1. Light Mode Tokens (Warm Paper & Sage) */
+:root {
+	--canvas: hsl(140 14% 97%);
+	--surface: hsl(0 0% 100%);
+	--border-subtle: hsl(140 10% 88%);
+	--text-primary: hsl(146 14% 13%);
+	--text-muted: hsl(142 8% 44%);
+
+	--primary-sage: hsl(142 13% 42%);
+	--primary-dark: hsl(142 15% 34%);
+	--accent-gold: hsl(44 67% 46%);
+
+	--status-success: hsl(142 70% 35%);
+	--status-warning: hsl(38 92% 50%);
+	--status-danger: hsl(0 72% 51%);
+
+	/* Badge Semantic Tokens (Light - Soft Tinted Sage Topology) */
+	--badge-primary-bg: hsla(142, 13%, 42%, 0.12);
+	--badge-primary-text: hsl(142, 15%, 30%);
+	--badge-primary-border: hsla(142, 13%, 42%, 0.25);
+	--badge-secondary-bg: hsl(140, 14%, 94%);
+	--badge-secondary-text: hsl(146, 14%, 24%);
+	--badge-secondary-border: hsl(140, 10%, 86%);
+	--badge-success-bg: hsla(142, 70%, 35%, 0.12);
+	--badge-warning-bg: hsla(38, 92%, 50%, 0.14);
+	--badge-danger-bg: hsla(0, 72%, 51%, 0.12);
+}
+
+/* 2. Dark Mode Tokens (Deep Forest Night) */
+.dark {
+	--canvas: hsl(146 15% 8%);
+	--surface: hsl(146 14% 12%);
+	--border-subtle: hsl(146 10% 20%);
+	--text-primary: hsl(140 14% 95%);
+	--text-muted: hsl(142 8% 65%);
+
+	--primary-sage: hsl(142 15% 48%);
+	--primary-dark: hsl(142 15% 58%);
+	--accent-gold: hsl(44 67% 55%);
+	--status-success: hsl(142 70% 45%);
+	--status-warning: hsl(38 92% 60%);
+	--status-danger: hsl(0 72% 60%);
+
+	/* Badge Semantic Tokens (Dark - Soft Tinted Sage Topology) */
+	--badge-primary-bg: hsla(142, 15%, 48%, 0.22);
+	--badge-primary-text: hsl(142, 15%, 65%);
+	--badge-primary-border: hsla(142, 15%, 48%, 0.34);
+	--badge-secondary-bg: hsla(146, 15%, 16%, 0.8);
+	--badge-secondary-text: hsl(140, 14%, 90%);
+	--badge-secondary-border: hsl(146, 10%, 24%);
+	--badge-success-bg: hsla(142, 70%, 45%, 0.18);
+	--badge-warning-bg: hsla(38, 92%, 60%, 0.15);
+	--badge-danger-bg: hsla(0, 72%, 60%, 0.15);
+}
+
+@layer base {
+	body {
+		background-color: var(--color-canvas);
+		color: var(--color-text-primary);
+		font-family: var(--font-sans);
+		-webkit-font-smoothing: antialiased;
+		-moz-osx-font-smoothing: grayscale;
+		text-rendering: optimizeLegibility;
+	}
+
+	a[href],
+	button:not(:disabled),
+	[role="button"]:not(:disabled),
+	[role="tab"]:not(:disabled),
+	[role="switch"]:not(:disabled),
+	select:not(:disabled),
+	summary,
+	label[for] {
+		cursor: pointer;
+	}
+
+	button:disabled,
+	input:disabled,
+	select:disabled,
+	textarea:disabled,
+	[aria-disabled="true"] {
+		cursor: not-allowed;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	*,
+	*::before,
+	*::after {
+		animation-duration: 0.01ms !important;
+		animation-iteration-count: 1 !important;
+		transition-duration: 0.01ms !important;
+		scroll-behavior: auto !important;
+		}
+}
+
+/* ---- macOS / MacBook Style Utilities ---- */
+.mac-glass {
+	background: rgba(255, 255, 255, 0.75);
+	backdrop-filter: blur(16px) saturate(180%);
+	-webkit-backdrop-filter: blur(16px) saturate(180%);
+}
+
+.dark .mac-glass {
+	background: rgba(20, 24, 22, 0.75);
+	backdrop-filter: blur(16px) saturate(180%);
+	-webkit-backdrop-filter: blur(16px) saturate(180%);
+}
+
+.mac-shadow {
+	box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.08), 0 0 0 1px rgba(0, 0, 0, 0.04);
+}
+
+.dark .mac-shadow {
+	box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
+/* ---- Custom Keyframe Animations ---- */
+
+@keyframes fadeInDown {
+	from {
+		opacity: 0;
+		transform: translateY(-12px);
+	}
+	to {
+		opacity: 1;
+		transform: translateY(0);
+	}
+}
+
+@keyframes fadeInUp {
+	from {
+		opacity: 0;
+		transform: translateY(16px);
+	}
+	to {
+		opacity: 1;
+		transform: translateY(0);
+	}
+}
+
+@keyframes floatSlow {
+	0%, 100% {
+		transform: translateY(0px) scale(1);
+	}
+	50% {
+		transform: translateY(-10px) scale(1.04);
+	}
+}
+
+@keyframes pulseGlow {
+	0%, 100% {
+		opacity: 0.15;
+		transform: scale(1);
+	}
+	50% {
+		opacity: 0.28;
+		transform: scale(1.08);
+	}
+}
+
+@keyframes popIn {
+	0% {
+		opacity: 0;
+		transform: scale(0.96) translateY(12px);
+	}
+	100% {
+		opacity: 1;
+		transform: scale(1) translateY(0);
+	}
+}
+
+@keyframes shimmer {
+	0% { transform: translateX(-100%); }
+	50% { transform: translateX(100%); }
+	100% { transform: translateX(100%); }
+}
+
+.animate-fade-in-up {
+	animation: fadeInUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-fade-in-down {
+	animation: fadeInDown 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-pop-in {
+	animation: popIn 0.45s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-float-slow {
+	animation: floatSlow 7s ease-in-out infinite;
+}
+
+.animate-pulse-glow {
+	animation: pulseGlow 5s ease-in-out infinite;
+}
+
+/* Custom HeroUI-style Thin Scrollbar */
+*,
+html,
+body {
+	scrollbar-width: thin;
+	scrollbar-color: hsla(142, 13%, 42%, 0.45) transparent;
+}
+
+html {
+	scroll-behavior: smooth;
+}
+
+*::-webkit-scrollbar,
+html::-webkit-scrollbar,
+body::-webkit-scrollbar {
+	width: 6px;
+	height: 6px;
+}
+
+*::-webkit-scrollbar-track,
+html::-webkit-scrollbar-track,
+body::-webkit-scrollbar-track {
+	background: transparent;
+}
+
+*::-webkit-scrollbar-thumb,
+html::-webkit-scrollbar-thumb,
+body::-webkit-scrollbar-thumb {
+	background-color: hsla(142, 13%, 42%, 0.4);
+	border-radius: 9999px;
+}
+
+*::-webkit-scrollbar-thumb:hover,
+html::-webkit-scrollbar-thumb:hover,
+body::-webkit-scrollbar-thumb:hover {
+	background-color: hsla(142, 13%, 42%, 0.75);
+}
+
+.dark *::-webkit-scrollbar-thumb,
+.dark html::-webkit-scrollbar-thumb,
+.dark body::-webkit-scrollbar-thumb {
+	background-color: hsla(142, 15%, 58%, 0.35);
+}
+
+.dark *::-webkit-scrollbar-thumb:hover,
+.dark html::-webkit-scrollbar-thumb:hover,
+.dark body::-webkit-scrollbar-thumb:hover {
+	background-color: hsla(142, 15%, 58%, 0.65);
+}
+
+.scrollbar-none {
+	scrollbar-width: none;
+	-ms-overflow-style: none;
+}
+.scrollbar-none::-webkit-scrollbar {
+	display: none;
+}

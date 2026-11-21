@@ -1,0 +1,53 @@
+# Dependencies
+node_modules/
+**/node_modules/
+.pnp
+.pnp.js
+
+# Build outputs
+dist/
+**/dist/
+build/
+**/build/
+out/
+**/.next/
+.turbo/
+*.tsbuildinfo
+
+# Environment & Secrets
+.env
+**/.env
+.env.local
+**/.env.local
+.env.*.local
+**/.env.*.local
+*.env
+!**/*.env.example
+!**/.env.example
+
+# Supabase local temp & secrets
+supabase/.temp/
+**/supabase/.temp/
+supabase/.branches/
+**/supabase/.branches/
+**/start-secrets/
+
+# Logs & Cache
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.eslintcache
+coverage/
+
+# OS & Editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+tmp/
+*.tmp

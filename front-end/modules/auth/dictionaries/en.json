@@ -1,0 +1,48 @@
+{
+  "Auth": {
+    "loginTitle": "Welcome Back",
+    "loginSubtitle": "Sign in to your TIJARAH-3 partner account.",
+    "showcaseBadge": "Official Partner BC HNI 3 Bukittinggi",
+    "showcaseTitle": "Integrated HNI Herbal Distribution & Shopping System",
+    "showcaseSubtitle": "Manage stockist orders, auto-post HSIS points, and track inventory in realtime.",
+    "feature1": "⚡ Auto-Posting HSIS",
+    "feature2": "📦 Realtime Stockist & Retail",
+    "feature3": "💳 Partner Credit Management",
+    "emailLabel": "Email Address",
+    "emailPlaceholder": "email@you.com",
+    "passwordLabel": "Password",
+    "passwordPlaceholder": "Enter your password",
+    "forgotPassword": "Forgot Password?",
+    "loginBtn": "Sign In",
+    "googleLoginBtn": "Continue with Google",
+    "orDivider": "or continue with email",
+    "registerLink": "Don't have an account?",
+    "signUpText": "Sign Up Now",
+    "backToHome": "← Back to Home",
+    "validation": {
+      "emailRequired": "Email address is required",
+      "emailInvalid": "Invalid email format",
+      "passwordRequired": "Password is required",
+      "passwordMinLength": "Password must be at least 6 characters",
+      "fullNameMinLength": "Full name must be at least 3 characters",
+      "phoneRequired": "Phone number is required",
+      "phoneMinLength": "Phone number must be at least 10 digits"
+    }
+  },
+  "NewsProduct": {
+    "sectionTitle": "New Products & Promos",
+    "sectionSubtitle": "Discover exclusive HNI partner offers and new arrivals",
+    "newProductBadge": "New Arrival",
+    "promoBadge": "20% Off",
+    "bestsellerBadge": "Best Seller",
+    "product1Title": "HNI Premium Gold Honey",
+    "product1Desc": "Pure nutrient-rich honey packed with antioxidants for daily vitality.",
+    "product2Title": "Herbal Synergy Oil (MHS)",
+    "product2Desc": "Versatile herbal soothing oil for aches, pain relief, and skin care.",
+    "product3Title": "Sevel Coffee HNI HPAI",
+    "product3Desc": "Delicious herbal coffee blend with 7 natural elements for extra energy.",
+    "copyCodeBtn": "Copy Code",
+    "codeCopied": "Copied!",
+    "detailBtn": "View Detail"
+  }
+}

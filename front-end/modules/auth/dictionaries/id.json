@@ -1,0 +1,48 @@
+{
+  "Auth": {
+    "loginTitle": "Selamat Datang Kembali",
+    "loginSubtitle": "Masuk ke akun mitra TIJARAH-3 Anda.",
+    "showcaseBadge": "Mitra Resmi BC HNI 3 Bukittinggi",
+    "showcaseTitle": "Ekosistem Terpadu Distribusi & Belanja Herba HNI",
+    "showcaseSubtitle": "Kelola transaksi stokis, auto-posting poin HSIS, dan pantau stok barang secara realtime.",
+    "feature1": "⚡ Auto-Posting HSIS",
+    "feature2": "📦 Stokis & Retail Realtime",
+    "feature3": "💳 Manajemen Kasbon Mitra",
+    "emailLabel": "Alamat Email",
+    "emailPlaceholder": "email@anda.com",
+    "passwordLabel": "Kata Sandi",
+    "passwordPlaceholder": "Masukkan kata sandi Anda",
+    "forgotPassword": "Lupa Kata Sandi?",
+    "loginBtn": "Masuk",
+    "googleLoginBtn": "Lanjutkan dengan Google",
+    "orDivider": "atau lanjutkan dengan email",
+    "registerLink": "Belum punya akun?",
+    "signUpText": "Daftar Sekarang",
+    "backToHome": "← Kembali ke Beranda",
+    "validation": {
+      "emailRequired": "Alamat email wajib diisi",
+      "emailInvalid": "Format email tidak valid",
+      "passwordRequired": "Kata sandi wajib diisi",
+      "passwordMinLength": "Kata sandi minimal 6 karakter",
+      "fullNameMinLength": "Nama lengkap minimal 3 karakter",
+      "phoneRequired": "Nomor telepon wajib diisi",
+      "phoneMinLength": "Nomor telepon minimal 10 digit"
+    }
+  },
+  "NewsProduct": {
+    "sectionTitle": "Info & Promo Produk Terbaru",
+    "sectionSubtitle": "Dapatkan penawaran spesial dan katalog terbaru mitra HNI",
+    "newProductBadge": "Terbaru",
+    "promoBadge": "Diskon 20%",
+    "bestsellerBadge": "Terlaris",
+    "product1Title": "Madu HNI Premium Gold",
+    "product1Desc": "Madu murni kaya nutrisi dan zat antioksidan untuk stamina dan kesehatan harian.",
+    "product2Title": "Minyak Herba Sinergi (MHS)",
+    "product2Desc": "Minyak balur herbal serbaguna untuk pegal, meredakan nyeri, dan perawatan kulit.",
+    "product3Title": "Kopi Sevel HNI HPAI",
+    "product3Desc": "Kopi nikmat racikan 7 elemen herbal alami untuk imunitas dan energi ekstra.",
+    "copyCodeBtn": "Salin Kode",
+    "codeCopied": "Tersalin!",
+    "detailBtn": "Lihat Detail"
+  }
+}

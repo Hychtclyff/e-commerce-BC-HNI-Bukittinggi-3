@@ -1,0 +1,18 @@
+{
+    "Products": {
+        "badge": "Official Catalog BC HNI 3 Bukittinggi",
+        "title": "Herbal Products &",
+        "highlight": "Synergy Recipes",
+        "subtitle": "Complete collection of halal certified products with official pricing and transparent HSIS point allocation.",
+        "filterAll": "All Products",
+        "filterHealth": "Health & Herbs",
+        "filterBeverage": "Healthy Beverages",
+        "filterNutrition": "Nutrition & Honey",
+        "filterCare": "Personal Care",
+        "consumerPriceLabel": "Retail Price (HK):",
+        "agentPriceLabel": "Agent Price (HA):",
+        "pointLabel": "Points:",
+        "addToCart": "+ Add to Cart",
+        "disclaimer": "*Disclaimer: Herbal products are natural nutritional efforts and do not substitute emergency medical procedures."
+    }
+}

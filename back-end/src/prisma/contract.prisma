@@ -1,0 +1,352 @@
+// use prisma-8
+
+
+namespace core_auth {
+  model User {
+    id            String   @id @default(uuid())
+    fullName      String
+    phoneNumber   String?   @unique
+    email         String?  @unique
+    passwordHash  String?
+    userType      String   @default("CUSTOMER")
+    isActive      Boolean? @default(true)
+    isDeleted     Boolean? @default(false)
+    deletedAt     TimestamptzString?
+    createdAt     TimestamptzString @default(now())
+    updatedAt     temporal.updatedAtString()
+
+    hniProfile    HNIProfile?
+    addresses     Address[]
+    roles         UserRole[]
+
+    @@map("users")
+    @@index([phoneNumber])
+    @@index([isDeleted])
+  }
+
+  model HNIProfile {
+    id            String   @id @default(uuid())
+    userId        String   @unique
+    user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+    hniMemberId   String   @unique
+    hniMemberName String
+    uplineName    String?
+    rank          String?  
+    rankMarketing String?  
+    isVerified    Boolean  @default(false) // by admin, to activate user
+
+    createdAt     TimestamptzString @default(now())
+    updatedAt     temporal.updatedAtString()
+    deletedAt     TimestamptzString?
+    isDeleted     Boolean? @default(false)
+
+    @@map("hni_profiles")
+    @@index([hniMemberId])
+    @@index([isDeleted])
+  }
+
+  model Role {
+    id          String   @id @default(uuid())
+    name        String   @unique
+    displayName String
+    description String?
+    isSystem    Boolean? @default(false)
+    createdAt   TimestamptzString @default(now())
+    updatedAt   temporal.updatedAtString()
+
+    permissions RolePermission[]
+    users       UserRole[]
+
+    @@map("roles")
+  }
+
+  model Permission {
+    id          String   @id @default(uuid())
+    code        String   @unique
+    group       String
+    description String?
+    createdAt   TimestamptzString @default(now())
+
+    roles       RolePermission[]
+
+    @@map("permissions")
+    @@index([group])
+  }
+
+  model RolePermission {
+    roleId       String
+    permissionId String
+    assignedAt   TimestamptzString @default(now())
+
+    role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+    permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+    @@id([roleId, permissionId])
+    @@map("role_permissions")
+  }
+
+  model UserRole {
+    userId     String
+    roleId     String
+    assignedAt TimestamptzString @default(now())
+
+    user       User @relation(fields: [userId], references: [id], onDelete: Cascade)
+    role       Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+    @@id([userId, roleId])
+    @@map("user_roles")
+  }
+
+  model Address {
+    id           String   @id @default(uuid())
+    userId       String
+    recipientName String
+    phoneNumber  String
+    fullAddress  String
+    district     String
+    city         String
+    province     String?  @default("Sumatera Barat")
+    postalCode   String?
+    isPrimary    Boolean? @default(false)
+    createdAt    TimestamptzString @default(now())
+
+    user         User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+    @@map("addresses")
+    @@index([userId])
+  }
+}
+
+namespace b2b_credit {
+  model CreditProfile {
+    id              String   @id @default(uuid())
+    userId          String   @unique
+    status          String   @default("UNREGISTERED") // UNREGISTERED | PENDING_APPROVAL | ACTIVE | REJECTED | LOCKED | SUSPENDED
+    creditLimit     Float    @default(2000000)
+    currentBalance  Float    @default(2000000)
+    usedBalance     Float    @default(0)
+    dueDate         TimestamptzString?
+    isLocked        Boolean  @default(false)
+    postingMode     String   @default("STRICT_HOLD")
+    appliedAt       TimestamptzString?
+    approvedAt      TimestamptzString?
+    approvedBy      String?
+    rejectedAt      TimestamptzString?
+    rejectionReason String?
+    createdAt       TimestamptzString @default(now())
+    updatedAt       temporal.updatedAtString()
+
+    applications    CreditApplication[]
+    ledgerEntries   CreditLedgerEntry[]
+
+    @@map("b2b_credit_profiles")
+    @@index([userId])
+    @@index([status])
+  }
+
+  model CreditApplication {
+    id                 String   @id @default(uuid())
+    creditProfileId    String
+    creditProfile      CreditProfile @relation(fields: [creditProfileId], references: [id], onDelete: Cascade)
+    userId             String
+    requestedLimit     Float    @default(2000000)
+    purpose            String?
+    alternativePhone   String?
+    agreementAccepted  Boolean  @default(true)
+    status             String   @default("PENDING_APPROVAL")
+    reviewedBy         String?
+    reviewedAt         TimestamptzString?
+    adminNotes         String?
+    createdAt          TimestamptzString @default(now())
+    updatedAt          temporal.updatedAtString()
+
+    @@map("b2b_credit_applications")
+    @@index([creditProfileId])
+    @@index([userId])
+    @@index([status])
+  }
+
+  model CreditLedgerEntry {
+    id              String   @id @default(uuid())
+    creditProfileId String
+    type            String   // DISBURSEMENT | REPAYMENT | ADJUSTMENT
+    amount          Float
+    runningBalance  Float
+    referenceNo     String?
+    description     String
+    itemsJson       String?
+    createdAt       TimestamptzString @default(now())
+
+    creditProfile   CreditProfile @relation(fields: [creditProfileId], references: [id], onDelete: Cascade)
+
+    @@map("credit_ledger_entries")
+    @@index([creditProfileId])
+  }
+}
+
+namespace promotions {
+  model Voucher {
+    id            String   @id @default(uuid())
+    code          String   @unique
+    title         String
+    discountType  String   // FIXED | PERCENTAGE | SHIPPING_SUBSIDY
+    discountValue Float
+    minPurchase   Float    @default(0)
+    maxDiscount   Float?
+    quota         Int      @default(100)
+    usedCount     Int      @default(0) @map("used_count")
+    conditions    Json?
+    validUntil    TimestamptzString
+    isActive      Boolean  @default(true)
+    description   String
+    createdAt     TimestamptzString @default(now())
+
+    userVouchers  UserVoucher[]
+
+    @@map("vouchers")
+    @@index([code])
+  }
+
+  model UserVoucher {
+    id          String   @id @default(uuid())
+    userId      String
+    voucherId   String
+    isUsed      Boolean  @default(false)
+    usageCount  Int      @default(0) @map("usage_count")
+    usedAt      TimestamptzString?
+    assignedAt  TimestamptzString @default(now())
+
+    voucher     Voucher  @relation(fields: [voucherId], references: [id], onDelete: Cascade)
+
+    @@map("user_vouchers")
+    @@index([userId])
+    @@index([voucherId])
+  }
+}
+
+namespace products {
+  model Product {
+    id                   String   @id @default(uuid())
+    name                 String
+    sku                  String   @unique
+    category             String   @default("HERBAL")
+    agentPrice           Float
+    normalPrice          Float
+    tpPoints             Int      @default(0)
+    stock                Int      @default(100)
+    imageUrl             String?
+    description          String?
+    isActive             Boolean  @default(true)
+    isSeparable          Boolean  @default(false) @map("is_separable")
+    defaultBreakdownQty  Int?     @map("default_breakdown_qty")
+    isFraction           Boolean  @default(false) @map("is_fraction")
+    parentProductId      String?  @map("parent_product_id")
+    allowAgentPrice      Boolean  @default(true)  @map("allow_agent_price")
+    rewardPoints         Int      @default(0)     @map("reward_points")
+    physicalStock        Int      @default(0)     @map("physical_stock")
+    pointStock           Int      @default(0)     @map("point_stock")
+    createdAt            TimestamptzString @default(now())
+    updatedAt            temporal.updatedAtString()
+
+    @@map("products")
+    @@index([sku])
+    @@index([category])
+    @@index([parentProductId])
+  }
+}
+
+namespace orders {
+  model Order {
+    id                  String   @id @default(uuid())
+    orderNumber         String   @unique
+    slug                String?  @unique
+    userId              String
+    isAgentPriceApplied Boolean  @default(false)
+    
+    shippingType        String   @default("DELIVERY") // DELIVERY | PICKUP
+    addressId           String?
+    recipientName       String?
+    recipientPhone      String?
+    shippingAddressText String?
+    shippingCourier     String?
+    trackingNumber      String?
+    
+    subtotal            Float
+    shippingCost        Float    @default(0)
+    discountAmount      Float    @default(0)
+    voucherCode         String?
+    totalAmount         Float
+    totalTpPoints       Int      @default(0)
+    
+    paymentMethod       String   // B2B_CREDIT | QRIS_MOCKUP | BANK_TRANSFER_MOCKUP | CASH_STORE
+    paymentStatus       String   @default("UNPAID") // UNPAID | PAID | TEMPO_ACTIVE | REFUNDED
+    orderStatus         String   @default("WAITING_APPROVAL") // PENDING_PAYMENT | WAITING_APPROVAL | PROCESSING | SHIPPED | COMPLETED | REJECTED | CANCELLED
+    
+    dueDate             TimestamptzString?
+    rejectionReason     String?
+    cancellationReason  String?
+    notes               String?
+    
+    hsisPostingStatus   String?  @default("PENDING") // PENDING | PROCESSING | POSTED | HOLD | FAILED
+    hsisReceiptNo       String?
+    hsisPostedAt        TimestamptzString?
+    invoiceId           String?  @unique @map("invoice_id")
+    sourceChannel       String   @default("ONLINE") @map("source_channel") // ONLINE | OFFLINE_HSIS
+    hsisMemberId        String?  @map("hsis_member_id")
+    hsisCustomerName    String?  @map("hsis_customer_name")
+    hsisSaleType        String?  @map("hsis_sale_type") // MLM
+
+    createdAt           TimestamptzString @default(now())
+    updatedAt           temporal.updatedAtString()
+
+    items               OrderItem[]
+
+    @@map("orders")
+    @@index([userId])
+    @@index([orderNumber])
+    @@index([slug])
+    @@index([invoiceId])
+    @@index([sourceChannel])
+    @@index([orderStatus])
+  }
+
+  model OrderItem {
+    id              String   @id @default(uuid())
+    orderId         String
+    productId       String
+    sku             String?
+    productName     String
+    productImageUrl String?
+    qty             Int
+    normalPrice     Float?
+    unitPrice       Float
+    tpPoints        Int      @default(0)
+    totalPrice      Float
+    totalPoints     Int?
+
+    order           Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+    @@map("order_items")
+    @@index([orderId])
+  }
+}
+
+namespace notifications {
+  model Notification {
+    id          String   @id @default(uuid())
+    userId      String
+    title       String
+    message     String
+    category    String   // ORDER_STATUS | B2B_KASBON | PROMO_VOUCHER | SYSTEM
+    referenceId String?  // ID Order / ID Application
+    isRead      Boolean  @default(false)
+    readAt      TimestamptzString?
+    createdAt   TimestamptzString @default(now())
+
+    @@map("notifications")
+    @@index([userId, isRead])
+    @@index([category])
+    @@index([createdAt])
+  }
+}

@@ -1,0 +1,18 @@
+{
+    "Products": {
+        "badge": "Katalog Resmi BC HNI 3 Bukittinggi",
+        "title": "Daftar Produk Herba &",
+        "highlight": "Resep Sinergi",
+        "subtitle": "Koleksi lengkap produk halal berkualitas tinggi dengan skema harga resmi dan transparansi perolehan poin HSIS.",
+        "filterAll": "Semua Produk",
+        "filterHealth": "Kesehatan & Herba",
+        "filterBeverage": "Minuman Sehat",
+        "filterNutrition": "Nutrisi & Madu",
+        "filterCare": "Perawatan Diri",
+        "consumerPriceLabel": "Harga Konsumen (HK):",
+        "agentPriceLabel": "Harga Agen (HA):",
+        "pointLabel": "Poin:",
+        "addToCart": "+ Keranjang",
+        "disclaimer": "*Disclaimer: Produk herba adalah ikhtiar nutrisi alami dan bukan pengganti tindakan medis darurat."
+    }
+}

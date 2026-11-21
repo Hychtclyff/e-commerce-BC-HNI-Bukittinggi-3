@@ -1,0 +1,1203 @@
+[
+  {
+    "id": "schema.core_auth",
+    "label": "Create schema \"core_auth\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres"
+    },
+    "precheck": [],
+    "execute": [
+      {
+        "description": "Create schema \"core_auth\"",
+        "sql": "CREATE SCHEMA IF NOT EXISTS \"core_auth\"",
+        "params": []
+      }
+    ],
+    "postcheck": []
+  },
+  {
+    "id": "schema.public",
+    "label": "Create schema \"public\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres"
+    },
+    "precheck": [],
+    "execute": [
+      {
+        "description": "Create schema \"public\"",
+        "sql": "CREATE SCHEMA IF NOT EXISTS \"public\"",
+        "params": []
+      }
+    ],
+    "postcheck": []
+  },
+  {
+    "id": "table.addresses",
+    "label": "Create table \"addresses\"",
+    "summary": "Creates table \"addresses\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "core_auth",
+        "objectType": "table",
+        "name": "addresses"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure table \"addresses\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"core_auth\".\"addresses\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create table \"addresses\"",
+        "sql": "CREATE TABLE \"core_auth\".\"addresses\" (\n  \"city\" text NOT NULL,\n  \"createdAt\" timestamptz DEFAULT (now()) NOT NULL,\n  \"district\" text NOT NULL,\n  \"fullAddress\" text NOT NULL,\n  \"id\" text NOT NULL,\n  \"isPrimary\" bool DEFAULT false,\n  \"phoneNumber\" text NOT NULL,\n  \"postalCode\" text,\n  \"province\" text DEFAULT 'Sumatera Barat',\n  \"recipientName\" text NOT NULL,\n  \"userId\" text NOT NULL,\n  PRIMARY KEY (\"id\")\n)",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify table \"addresses\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"core_auth\".\"addresses\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "table.permissions",
+    "label": "Create table \"permissions\"",
+    "summary": "Creates table \"permissions\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "core_auth",
+        "objectType": "table",
+        "name": "permissions"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure table \"permissions\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"core_auth\".\"permissions\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create table \"permissions\"",
+        "sql": "CREATE TABLE \"core_auth\".\"permissions\" (\n  \"code\" text NOT NULL,\n  \"createdAt\" timestamptz DEFAULT (now()) NOT NULL,\n  \"description\" text,\n  \"group\" text NOT NULL,\n  \"id\" text NOT NULL,\n  PRIMARY KEY (\"id\")\n)",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify table \"permissions\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"core_auth\".\"permissions\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "table.role_permissions",
+    "label": "Create table \"role_permissions\"",
+    "summary": "Creates table \"role_permissions\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "core_auth",
+        "objectType": "table",
+        "name": "role_permissions"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure table \"role_permissions\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"core_auth\".\"role_permissions\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create table \"role_permissions\"",
+        "sql": "CREATE TABLE \"core_auth\".\"role_permissions\" (\n  \"assignedAt\" timestamptz DEFAULT (now()) NOT NULL,\n  \"permissionId\" text NOT NULL,\n  \"roleId\" text NOT NULL,\n  PRIMARY KEY (\"roleId\", \"permissionId\")\n)",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify table \"role_permissions\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"core_auth\".\"role_permissions\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "table.roles",
+    "label": "Create table \"roles\"",
+    "summary": "Creates table \"roles\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "core_auth",
+        "objectType": "table",
+        "name": "roles"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure table \"roles\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"core_auth\".\"roles\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create table \"roles\"",
+        "sql": "CREATE TABLE \"core_auth\".\"roles\" (\n  \"createdAt\" timestamptz DEFAULT (now()) NOT NULL,\n  \"description\" text,\n  \"displayName\" text NOT NULL,\n  \"id\" text NOT NULL,\n  \"isSystem\" bool DEFAULT false,\n  \"name\" text NOT NULL,\n  \"updatedAt\" timestamptz NOT NULL,\n  PRIMARY KEY (\"id\")\n)",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify table \"roles\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"core_auth\".\"roles\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "table.user_roles",
+    "label": "Create table \"user_roles\"",
+    "summary": "Creates table \"user_roles\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "core_auth",
+        "objectType": "table",
+        "name": "user_roles"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure table \"user_roles\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"core_auth\".\"user_roles\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create table \"user_roles\"",
+        "sql": "CREATE TABLE \"core_auth\".\"user_roles\" (\n  \"assignedAt\" timestamptz DEFAULT (now()) NOT NULL,\n  \"roleId\" text NOT NULL,\n  \"userId\" text NOT NULL,\n  PRIMARY KEY (\"userId\", \"roleId\")\n)",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify table \"user_roles\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"core_auth\".\"user_roles\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "table.users",
+    "label": "Create table \"users\"",
+    "summary": "Creates table \"users\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "core_auth",
+        "objectType": "table",
+        "name": "users"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure table \"users\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"core_auth\".\"users\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create table \"users\"",
+        "sql": "CREATE TABLE \"core_auth\".\"users\" (\n  \"createdAt\" timestamptz DEFAULT (now()) NOT NULL,\n  \"email\" text,\n  \"fullName\" text NOT NULL,\n  \"hniMemberId\" text,\n  \"hniMemberName\" text,\n  \"id\" text NOT NULL,\n  \"isActive\" bool DEFAULT true,\n  \"passwordHash\" text NOT NULL,\n  \"phoneNumber\" text NOT NULL,\n  \"updatedAt\" timestamptz NOT NULL,\n  \"userType\" text DEFAULT 'CUSTOMER' NOT NULL,\n  PRIMARY KEY (\"id\")\n)",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify table \"users\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"core_auth\".\"users\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "table.post",
+    "label": "Create table \"post\"",
+    "summary": "Creates table \"post\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "table",
+        "name": "post"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure table \"post\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"post\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create table \"post\"",
+        "sql": "CREATE TABLE \"public\".\"post\" (\n  \"authorId\" int4 NOT NULL,\n  \"content\" text,\n  \"createdAt\" timestamptz DEFAULT (now()) NOT NULL,\n  \"id\" SERIAL NOT NULL,\n  \"title\" text NOT NULL,\n  \"updatedAt\" timestamptz NOT NULL,\n  PRIMARY KEY (\"id\")\n)",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify table \"post\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"post\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "table.user",
+    "label": "Create table \"user\"",
+    "summary": "Creates table \"user\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "table",
+        "name": "user"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure table \"user\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"user\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create table \"user\"",
+        "sql": "CREATE TABLE \"public\".\"user\" (\n  \"createdAt\" timestamptz DEFAULT (now()) NOT NULL,\n  \"email\" text NOT NULL,\n  \"id\" SERIAL NOT NULL,\n  \"name\" text,\n  \"updatedAt\" timestamptz NOT NULL,\n  \"username\" text,\n  PRIMARY KEY (\"id\")\n)",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify table \"user\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"user\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "unique.permissions.permissions_code_key",
+    "label": "Add unique constraint on \"permissions\" (code)",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "core_auth",
+        "objectType": "unique",
+        "name": "permissions_code_key",
+        "table": "permissions"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"permissions_code_key\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "permissions_code_key",
+          "core_auth",
+          "\"core_auth\".\"permissions\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add unique constraint \"permissions_code_key\"",
+        "sql": "ALTER TABLE \"core_auth\".\"permissions\" ADD CONSTRAINT \"permissions_code_key\" UNIQUE (\"code\")"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"permissions_code_key\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "permissions_code_key",
+          "core_auth",
+          "\"core_auth\".\"permissions\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "unique.roles.roles_name_key",
+    "label": "Add unique constraint on \"roles\" (name)",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "core_auth",
+        "objectType": "unique",
+        "name": "roles_name_key",
+        "table": "roles"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"roles_name_key\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "roles_name_key",
+          "core_auth",
+          "\"core_auth\".\"roles\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add unique constraint \"roles_name_key\"",
+        "sql": "ALTER TABLE \"core_auth\".\"roles\" ADD CONSTRAINT \"roles_name_key\" UNIQUE (\"name\")"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"roles_name_key\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "roles_name_key",
+          "core_auth",
+          "\"core_auth\".\"roles\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "unique.users.users_phoneNumber_key",
+    "label": "Add unique constraint on \"users\" (phoneNumber)",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "core_auth",
+        "objectType": "unique",
+        "name": "users_phoneNumber_key",
+        "table": "users"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"users_phoneNumber_key\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "users_phoneNumber_key",
+          "core_auth",
+          "\"core_auth\".\"users\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add unique constraint \"users_phoneNumber_key\"",
+        "sql": "ALTER TABLE \"core_auth\".\"users\" ADD CONSTRAINT \"users_phoneNumber_key\" UNIQUE (\"phoneNumber\")"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"users_phoneNumber_key\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "users_phoneNumber_key",
+          "core_auth",
+          "\"core_auth\".\"users\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "unique.users.users_email_key",
+    "label": "Add unique constraint on \"users\" (email)",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "core_auth",
+        "objectType": "unique",
+        "name": "users_email_key",
+        "table": "users"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"users_email_key\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "users_email_key",
+          "core_auth",
+          "\"core_auth\".\"users\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add unique constraint \"users_email_key\"",
+        "sql": "ALTER TABLE \"core_auth\".\"users\" ADD CONSTRAINT \"users_email_key\" UNIQUE (\"email\")"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"users_email_key\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "users_email_key",
+          "core_auth",
+          "\"core_auth\".\"users\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "unique.users.users_hniMemberId_key",
+    "label": "Add unique constraint on \"users\" (hniMemberId)",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "core_auth",
+        "objectType": "unique",
+        "name": "users_hniMemberId_key",
+        "table": "users"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"users_hniMemberId_key\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "users_hniMemberId_key",
+          "core_auth",
+          "\"core_auth\".\"users\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add unique constraint \"users_hniMemberId_key\"",
+        "sql": "ALTER TABLE \"core_auth\".\"users\" ADD CONSTRAINT \"users_hniMemberId_key\" UNIQUE (\"hniMemberId\")"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"users_hniMemberId_key\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "users_hniMemberId_key",
+          "core_auth",
+          "\"core_auth\".\"users\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "unique.user.user_email_key",
+    "label": "Add unique constraint on \"user\" (email)",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "unique",
+        "name": "user_email_key",
+        "table": "user"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"user_email_key\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "user_email_key",
+          "public",
+          "\"public\".\"user\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add unique constraint \"user_email_key\"",
+        "sql": "ALTER TABLE \"public\".\"user\" ADD CONSTRAINT \"user_email_key\" UNIQUE (\"email\")"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"user_email_key\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "user_email_key",
+          "public",
+          "\"public\".\"user\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.addresses.addresses_userId_idx_a489d58a",
+    "label": "Create index \"addresses_userId_idx_a489d58a\" on \"addresses\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "core_auth",
+        "objectType": "index",
+        "name": "addresses_userId_idx_a489d58a",
+        "table": "addresses"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"addresses_userId_idx_a489d58a\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"core_auth\".\"addresses_userId_idx_a489d58a\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"addresses_userId_idx_a489d58a\"",
+        "sql": "CREATE INDEX \"addresses_userId_idx_a489d58a\" ON \"core_auth\".\"addresses\" (\"userId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"addresses_userId_idx_a489d58a\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"core_auth\".\"addresses_userId_idx_a489d58a\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.permissions.permissions_group_idx_c7ec2205",
+    "label": "Create index \"permissions_group_idx_c7ec2205\" on \"permissions\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "core_auth",
+        "objectType": "index",
+        "name": "permissions_group_idx_c7ec2205",
+        "table": "permissions"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"permissions_group_idx_c7ec2205\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"core_auth\".\"permissions_group_idx_c7ec2205\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"permissions_group_idx_c7ec2205\"",
+        "sql": "CREATE INDEX \"permissions_group_idx_c7ec2205\" ON \"core_auth\".\"permissions\" (\"group\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"permissions_group_idx_c7ec2205\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"core_auth\".\"permissions_group_idx_c7ec2205\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.role_permissions.role_permissions_permissionId_idx_f46fcdf5",
+    "label": "Create index \"role_permissions_permissionId_idx_f46fcdf5\" on \"role_permissions\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "core_auth",
+        "objectType": "index",
+        "name": "role_permissions_permissionId_idx_f46fcdf5",
+        "table": "role_permissions"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"role_permissions_permissionId_idx_f46fcdf5\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"core_auth\".\"role_permissions_permissionId_idx_f46fcdf5\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"role_permissions_permissionId_idx_f46fcdf5\"",
+        "sql": "CREATE INDEX \"role_permissions_permissionId_idx_f46fcdf5\" ON \"core_auth\".\"role_permissions\" (\"permissionId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"role_permissions_permissionId_idx_f46fcdf5\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"core_auth\".\"role_permissions_permissionId_idx_f46fcdf5\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.role_permissions.role_permissions_roleId_idx_ffccc9a4",
+    "label": "Create index \"role_permissions_roleId_idx_ffccc9a4\" on \"role_permissions\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "core_auth",
+        "objectType": "index",
+        "name": "role_permissions_roleId_idx_ffccc9a4",
+        "table": "role_permissions"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"role_permissions_roleId_idx_ffccc9a4\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"core_auth\".\"role_permissions_roleId_idx_ffccc9a4\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"role_permissions_roleId_idx_ffccc9a4\"",
+        "sql": "CREATE INDEX \"role_permissions_roleId_idx_ffccc9a4\" ON \"core_auth\".\"role_permissions\" (\"roleId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"role_permissions_roleId_idx_ffccc9a4\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"core_auth\".\"role_permissions_roleId_idx_ffccc9a4\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.user_roles.user_roles_roleId_idx_ffccc9a4",
+    "label": "Create index \"user_roles_roleId_idx_ffccc9a4\" on \"user_roles\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "core_auth",
+        "objectType": "index",
+        "name": "user_roles_roleId_idx_ffccc9a4",
+        "table": "user_roles"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"user_roles_roleId_idx_ffccc9a4\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"core_auth\".\"user_roles_roleId_idx_ffccc9a4\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"user_roles_roleId_idx_ffccc9a4\"",
+        "sql": "CREATE INDEX \"user_roles_roleId_idx_ffccc9a4\" ON \"core_auth\".\"user_roles\" (\"roleId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"user_roles_roleId_idx_ffccc9a4\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"core_auth\".\"user_roles_roleId_idx_ffccc9a4\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.user_roles.user_roles_userId_idx_a489d58a",
+    "label": "Create index \"user_roles_userId_idx_a489d58a\" on \"user_roles\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "core_auth",
+        "objectType": "index",
+        "name": "user_roles_userId_idx_a489d58a",
+        "table": "user_roles"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"user_roles_userId_idx_a489d58a\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"core_auth\".\"user_roles_userId_idx_a489d58a\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"user_roles_userId_idx_a489d58a\"",
+        "sql": "CREATE INDEX \"user_roles_userId_idx_a489d58a\" ON \"core_auth\".\"user_roles\" (\"userId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"user_roles_userId_idx_a489d58a\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"core_auth\".\"user_roles_userId_idx_a489d58a\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.users.users_hniMemberId_idx_d516a637",
+    "label": "Create index \"users_hniMemberId_idx_d516a637\" on \"users\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "core_auth",
+        "objectType": "index",
+        "name": "users_hniMemberId_idx_d516a637",
+        "table": "users"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"users_hniMemberId_idx_d516a637\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"core_auth\".\"users_hniMemberId_idx_d516a637\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"users_hniMemberId_idx_d516a637\"",
+        "sql": "CREATE INDEX \"users_hniMemberId_idx_d516a637\" ON \"core_auth\".\"users\" (\"hniMemberId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"users_hniMemberId_idx_d516a637\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"core_auth\".\"users_hniMemberId_idx_d516a637\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.users.users_phoneNumber_idx_18928270",
+    "label": "Create index \"users_phoneNumber_idx_18928270\" on \"users\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "core_auth",
+        "objectType": "index",
+        "name": "users_phoneNumber_idx_18928270",
+        "table": "users"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"users_phoneNumber_idx_18928270\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"core_auth\".\"users_phoneNumber_idx_18928270\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"users_phoneNumber_idx_18928270\"",
+        "sql": "CREATE INDEX \"users_phoneNumber_idx_18928270\" ON \"core_auth\".\"users\" (\"phoneNumber\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"users_phoneNumber_idx_18928270\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"core_auth\".\"users_phoneNumber_idx_18928270\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.post.post_authorId_idx_e47547ed",
+    "label": "Create index \"post_authorId_idx_e47547ed\" on \"post\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "post_authorId_idx_e47547ed",
+        "table": "post"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"post_authorId_idx_e47547ed\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"post_authorId_idx_e47547ed\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"post_authorId_idx_e47547ed\"",
+        "sql": "CREATE INDEX \"post_authorId_idx_e47547ed\" ON \"public\".\"post\" (\"authorId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"post_authorId_idx_e47547ed\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"post_authorId_idx_e47547ed\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.addresses.addresses_userId_fkey",
+    "label": "Add foreign key \"addresses_userId_fkey\" on \"addresses\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "core_auth",
+        "objectType": "foreignKey",
+        "name": "addresses_userId_fkey",
+        "table": "addresses"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"addresses_userId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "addresses_userId_fkey",
+          "core_auth",
+          "\"core_auth\".\"addresses\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"addresses_userId_fkey\"",
+        "sql": "ALTER TABLE \"core_auth\".\"addresses\"\nADD CONSTRAINT \"addresses_userId_fkey\"\nFOREIGN KEY (\"userId\")\nREFERENCES \"core_auth\".\"users\" (\"id\")\nON DELETE CASCADE"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"addresses_userId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "addresses_userId_fkey",
+          "core_auth",
+          "\"core_auth\".\"addresses\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.role_permissions.role_permissions_roleId_fkey",
+    "label": "Add foreign key \"role_permissions_roleId_fkey\" on \"role_permissions\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "core_auth",
+        "objectType": "foreignKey",
+        "name": "role_permissions_roleId_fkey",
+        "table": "role_permissions"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"role_permissions_roleId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "role_permissions_roleId_fkey",
+          "core_auth",
+          "\"core_auth\".\"role_permissions\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"role_permissions_roleId_fkey\"",
+        "sql": "ALTER TABLE \"core_auth\".\"role_permissions\"\nADD CONSTRAINT \"role_permissions_roleId_fkey\"\nFOREIGN KEY (\"roleId\")\nREFERENCES \"core_auth\".\"roles\" (\"id\")\nON DELETE CASCADE"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"role_permissions_roleId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "role_permissions_roleId_fkey",
+          "core_auth",
+          "\"core_auth\".\"role_permissions\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.role_permissions.role_permissions_permissionId_fkey",
+    "label": "Add foreign key \"role_permissions_permissionId_fkey\" on \"role_permissions\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "core_auth",
+        "objectType": "foreignKey",
+        "name": "role_permissions_permissionId_fkey",
+        "table": "role_permissions"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"role_permissions_permissionId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "role_permissions_permissionId_fkey",
+          "core_auth",
+          "\"core_auth\".\"role_permissions\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"role_permissions_permissionId_fkey\"",
+        "sql": "ALTER TABLE \"core_auth\".\"role_permissions\"\nADD CONSTRAINT \"role_permissions_permissionId_fkey\"\nFOREIGN KEY (\"permissionId\")\nREFERENCES \"core_auth\".\"permissions\" (\"id\")\nON DELETE CASCADE"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"role_permissions_permissionId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "role_permissions_permissionId_fkey",
+          "core_auth",
+          "\"core_auth\".\"role_permissions\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.user_roles.user_roles_userId_fkey",
+    "label": "Add foreign key \"user_roles_userId_fkey\" on \"user_roles\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "core_auth",
+        "objectType": "foreignKey",
+        "name": "user_roles_userId_fkey",
+        "table": "user_roles"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"user_roles_userId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "user_roles_userId_fkey",
+          "core_auth",
+          "\"core_auth\".\"user_roles\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"user_roles_userId_fkey\"",
+        "sql": "ALTER TABLE \"core_auth\".\"user_roles\"\nADD CONSTRAINT \"user_roles_userId_fkey\"\nFOREIGN KEY (\"userId\")\nREFERENCES \"core_auth\".\"users\" (\"id\")\nON DELETE CASCADE"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"user_roles_userId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "user_roles_userId_fkey",
+          "core_auth",
+          "\"core_auth\".\"user_roles\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.user_roles.user_roles_roleId_fkey",
+    "label": "Add foreign key \"user_roles_roleId_fkey\" on \"user_roles\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "core_auth",
+        "objectType": "foreignKey",
+        "name": "user_roles_roleId_fkey",
+        "table": "user_roles"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"user_roles_roleId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "user_roles_roleId_fkey",
+          "core_auth",
+          "\"core_auth\".\"user_roles\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"user_roles_roleId_fkey\"",
+        "sql": "ALTER TABLE \"core_auth\".\"user_roles\"\nADD CONSTRAINT \"user_roles_roleId_fkey\"\nFOREIGN KEY (\"roleId\")\nREFERENCES \"core_auth\".\"roles\" (\"id\")\nON DELETE CASCADE"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"user_roles_roleId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "user_roles_roleId_fkey",
+          "core_auth",
+          "\"core_auth\".\"user_roles\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.post.post_authorId_fkey",
+    "label": "Add foreign key \"post_authorId_fkey\" on \"post\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "post_authorId_fkey",
+        "table": "post"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"post_authorId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "post_authorId_fkey",
+          "public",
+          "\"public\".\"post\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"post_authorId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"post\"\nADD CONSTRAINT \"post_authorId_fkey\"\nFOREIGN KEY (\"authorId\")\nREFERENCES \"core_auth\".\"users\" (\"id\")"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"post_authorId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "post_authorId_fkey",
+          "public",
+          "\"public\".\"post\""
+        ]
+      }
+    ]
+  }
+]
