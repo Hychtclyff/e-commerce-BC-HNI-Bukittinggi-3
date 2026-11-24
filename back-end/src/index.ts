@@ -1,6 +1,7 @@
 import { buildApp } from './app';
 import { env } from './config/env';
 import { startExpiredOrdersCron } from './modules/orders/expireOrders';
+import { startPrintQueueCron } from './modules/orders/printQueue';
 
 const app = buildApp();
 
@@ -11,6 +12,8 @@ async function start() {
 
     // Poin 11: Background worker auto-cancel order kedaluwarsa & pengembalian stok
     startExpiredOrdersCron(600000); // Tiap 10 menit
+    // Antrian print otomatis untuk pesanan yang sedang dikemas
+    startPrintQueueCron(60000); // Tiap 1 menit
   } catch (err) {
     app.log.error(err);
     process.exit(1);

@@ -47,7 +47,7 @@ export function ProfileSidebarNav({
     { id: "overview", label: t("tabOverview", "Ringkasan"), icon: <LayoutDashboard className="w-4 h-4" />, available: true },
     { id: "personal", label: t("tabPersonal", "Data Diri"), icon: <UserIcon className="w-4 h-4" />, available: true },
     { id: "hni", label: t("tabHni", "Keanggotaan HNI"), icon: <Leaf className="w-4 h-4" />, badge: hniProfile?.isVerified ? "✓" : "!", available: true },
-    { id: "kasbon", label: t("tabKasbon", "Kasbon / Kredit B2B"), icon: <CreditCard className="w-4 h-4" />, badge: "H+14", available: canCredit },
+    // { id: "kasbon", label: t("tabKasbon", "Kasbon / Kredit B2B"), icon: <CreditCard className="w-4 h-4" />, badge: "H+14", available: canCredit },
     { id: "addresses", label: t("tabAddresses", "Alamat Pengiriman"), icon: <MapPin className="w-4 h-4" />, available: true },
     { id: "orders", label: t("tabOrders", "Pesanan Saya"), icon: <ShoppingBag className="w-4 h-4" />, available: true },
     { id: "vouchers", label: t("tabVouchers", "Voucher & Promo"), icon: <Ticket className="w-4 h-4" />, available: true },

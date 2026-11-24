@@ -38,23 +38,57 @@ export default function ContactPage() {
     subject: "",
     message: "",
   });
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     apiClient
-      .get<{ data: ContactInfo }>("/store/contact-info")
+      .get<{ data: ContactInfo }>("/store/contact-info", {
+        skipAuthRedirect: true,
+        skipGlobalToast: true,
+      } as any)
       .then((res) => {
         if (res.data?.data) setInfo(res.data.data);
       })
       .catch(() => {});
   }, []);
 
+  const validateForm = () => {
+    const errs: Record<string, string> = {};
+    if (!form.name.trim() || form.name.trim().length < 2) {
+      errs.name = isEn ? "Name must be at least 2 characters." : "Nama wajib diisi (minimal 2 karakter).";
+    }
+    if (form.phone.trim()) {
+      if (!/^\d{9,15}$/.test(form.phone.trim())) {
+        errs.phone = isEn
+          ? "Phone must be 9-15 digits (numbers only)."
+          : "Nomor HP harus berupa 9-15 digit angka saja.";
+      }
+    }
+    if (form.email.trim()) {
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) {
+        errs.email = isEn ? "Invalid email format." : "Format email tidak valid.";
+      }
+    }
+    if (!form.phone.trim() && !form.email.trim()) {
+      errs.phone = isEn ? "Provide phone or email." : "Isi minimal Nomor HP atau Email agar dapat dihubungi.";
+    }
+    if (!form.subject.trim() || form.subject.trim().length < 3) {
+      errs.subject = isEn ? "Subject must be at least 3 characters." : "Subjek wajib diisi (minimal 3 karakter).";
+    }
+    if (!form.message.trim() || form.message.trim().length < 10) {
+      errs.message = isEn ? "Message must be at least 10 characters." : "Pesan minimal 10 karakter.";
+    }
+    setFieldErrors(errs);
+    return Object.keys(errs).length === 0;
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.name.trim() || !form.subject.trim() || !form.message.trim()) {
+    if (!validateForm()) {
       showToast.error(
-        isEn ? "Incomplete Form" : "Form Belum Lengkap",
-        isEn ? "Name, subject, and message are required." : "Nama, subjek, dan pesan wajib diisi."
+        isEn ? "Validation Failed" : "Validasi Form Gagal",
+        isEn ? "Please check the highlighted fields." : "Periksa kembali isian formulir yang ditandai merah."
       );
       return;
     }
@@ -68,6 +102,7 @@ export default function ContactPage() {
           : "Terima kasih! Tim gerai kami akan segera menindaklanjuti pesan Anda."
       );
       setForm({ name: "", email: "", phone: "", subject: "", message: "" });
+      setFieldErrors({});
     } catch (err: any) {
       showToast.error(isEn ? "Failed" : "Gagal", err?.message || "Gagal mengirim pesan.");
     } finally {
@@ -226,14 +261,27 @@ export default function ContactPage() {
                   label={isEn ? "Full Name*" : "Nama Lengkap*"}
                   placeholder={isEn ? "Your name" : "Nama Anda"}
                   value={form.name}
-                  onChange={(e) => setForm({ ...form, name: e.target.value })}
+                  onChange={(e) => {
+                    setForm({ ...form, name: e.target.value });
+                    if (fieldErrors.name) setFieldErrors({ ...fieldErrors, name: "" });
+                  }}
+                  isInvalid={!!fieldErrors.name}
+                  errorMessage={fieldErrors.name}
                   className="text-xs"
                 />
                 <TijarahInput
-                  label={isEn ? "Phone / WhatsApp" : "Nomor HP / WhatsApp"}
-                  placeholder="0812..."
+                  label={isEn ? "Phone / WhatsApp (9-15 digits)" : "Nomor HP / WhatsApp (Hanya Angka, maks 15 digit)"}
+                  placeholder="081234567890"
+                  inputMode="numeric"
+                  maxLength={15}
                   value={form.phone}
-                  onChange={(e) => setForm({ ...form, phone: e.target.value })}
+                  onChange={(e) => {
+                    const digitsOnly = e.target.value.replace(/\D/g, "").slice(0, 15);
+                    setForm({ ...form, phone: digitsOnly });
+                    if (fieldErrors.phone) setFieldErrors({ ...fieldErrors, phone: "" });
+                  }}
+                  isInvalid={!!fieldErrors.phone}
+                  errorMessage={fieldErrors.phone}
                   className="text-xs"
                 />
               </div>
@@ -244,25 +292,44 @@ export default function ContactPage() {
                   label="Email"
                   placeholder="email@example.com"
                   value={form.email}
-                  onChange={(e) => setForm({ ...form, email: e.target.value })}
+                  onChange={(e) => {
+                    setForm({ ...form, email: e.target.value });
+                    if (fieldErrors.email) setFieldErrors({ ...fieldErrors, email: "" });
+                  }}
+                  isInvalid={!!fieldErrors.email}
+                  errorMessage={fieldErrors.email}
                   className="text-xs"
                 />
                 <TijarahInput
                   label={isEn ? "Subject*" : "Subjek*"}
                   placeholder={isEn ? "Order / Agent / Product inquiry" : "Pertanyaan pesanan / produk"}
                   value={form.subject}
-                  onChange={(e) => setForm({ ...form, subject: e.target.value })}
+                  onChange={(e) => {
+                    setForm({ ...form, subject: e.target.value });
+                    if (fieldErrors.subject) setFieldErrors({ ...fieldErrors, subject: "" });
+                  }}
+                  isInvalid={!!fieldErrors.subject}
+                  errorMessage={fieldErrors.subject}
                   className="text-xs"
                 />
               </div>
 
-              <TijarahTextArea
-                label={isEn ? "Message*" : "Isi Pesan*"}
-                placeholder={isEn ? "Write your message here..." : "Tulis pesan atau pertanyaan Anda di sini..."}
-                value={form.message}
-                onChange={(e) => setForm({ ...form, message: e.target.value })}
-                className="text-xs min-h-[130px]"
-              />
+              <div>
+                <TijarahTextArea
+                  label={isEn ? "Message*" : "Isi Pesan*"}
+                  placeholder={isEn ? "Write your message here..." : "Tulis pesan atau pertanyaan Anda di sini..."}
+                  value={form.message}
+                  onChange={(e) => {
+                    setForm({ ...form, message: e.target.value });
+                    if (fieldErrors.message) setFieldErrors({ ...fieldErrors, message: "" });
+                  }}
+                  tijarahVariant={fieldErrors.message ? "error" : "primary"}
+                  className="text-xs min-h-[130px]"
+                />
+                {fieldErrors.message && (
+                  <p className="text-[11px] text-status-danger mt-1">{fieldErrors.message}</p>
+                )}
+              </div>
 
               <div className="flex justify-end pt-1">
                 <TijarahButton

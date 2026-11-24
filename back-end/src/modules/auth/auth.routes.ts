@@ -1,7 +1,19 @@
 import { FastifyInstance } from 'fastify';
 import { ZodTypeProvider } from 'fastify-type-provider-zod';
-import { registerSchema, loginSchema, googleAuthSchema, verifyOtpSchema, resendOtpSchema, exchangeCodeSchema, authHashSchema } from './auth.schema';
+import {
+  registerSchema,
+  loginSchema,
+  googleAuthSchema,
+  verifyOtpSchema,
+  resendOtpSchema,
+  exchangeCodeSchema,
+  authHashSchema,
+  forgotPasswordSchema,
+  resetPasswordSchema,
+  changePasswordSchema,
+} from './auth.schema';
 import { authController } from './auth.controller';
+import { requireAuth } from '@/utils/authGuard';
 
 export async function authRoutes(route: FastifyInstance) {
   // Tambahkan type provider khusus Zod di rute ini agar TypeScript mengenali tipe data dari request.body
@@ -48,4 +60,12 @@ export async function authRoutes(route: FastifyInstance) {
 
   server.get('/profile', authController.getProfile);
   server.put('/profile', authController.updateProfile);
+
+  server.post('/forgot-password', forgotPasswordSchema, authController.forgotPassword);
+  server.post('/reset-password', resetPasswordSchema, authController.resetPassword);
+  server.post('/refresh', authController.refresh);
+  server.register(async (authed) => {
+    authed.addHook('preHandler', requireAuth);
+    authed.post('/change-password', changePasswordSchema, authController.changePassword);
+  });
 }

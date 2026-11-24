@@ -31,6 +31,10 @@ import {
   FileText,
   Mail,
   ImageIcon,
+  FileSpreadsheet,
+  RotateCcw,
+  ShieldAlert,
+  Settings,
 } from "lucide-react";
 
 export interface IStoreSidebarNavProps {
@@ -182,6 +186,21 @@ export const StoreSidebarNav: React.FC<IStoreSidebarNavProps> = ({
       id: "reports",
       label: t("reports"),
       icon: <BarChart3 className="w-4 h-4 shrink-0" />,
+    },
+    {
+      id: "returns" as StoreTabType,
+      label: useLocale() === "en" ? "Order Returns" : "Retur & Komplain",
+      icon: <RotateCcw className="w-4 h-4 shrink-0" />,
+    },
+    {
+      id: "auditLogs" as StoreTabType,
+      label: useLocale() === "en" ? "Audit Trail" : "Audit Aktivitas",
+      icon: <ShieldAlert className="w-4 h-4 shrink-0" />,
+    },
+    {
+      id: "settings" as StoreTabType,
+      label: useLocale() === "en" ? "Store Settings" : "Pengaturan Toko",
+      icon: <Settings className="w-4 h-4 shrink-0" />,
     },
   ];
 

@@ -28,7 +28,10 @@ export default function About() {
 
   useEffect(() => {
     apiClient
-      .get<{ data: ContactInfo }>("/store/contact-info")
+      .get<{ data: ContactInfo }>("/store/contact-info", {
+        skipAuthRedirect: true,
+        skipGlobalToast: true,
+      } as any)
       .then((res) => {
         if (res.data?.data) setContact(res.data.data);
       })

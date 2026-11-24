@@ -5,6 +5,7 @@ import { Ticket, Check, Sparkles, Clock, AlertCircle } from "lucide-react";
 import { VoucherItem } from "@/modules/vouchers/types/vouchers.types";
 import { useTranslations } from "next-intl";
 import { TijarahButton } from "@/components/atom/tijarahButton";
+import { getVoucherViolationReason } from "@/utils/voucherEligibility";
 
 interface VoucherCardProps {
   voucher: VoucherItem;
@@ -22,7 +23,8 @@ export const VoucherCard: React.FC<VoucherCardProps> = ({
   showApplyButton = true,
 }) => {
   const t = useTranslations("vouchers");
-  const isEligible = subtotal >= voucher.minPurchase;
+  const violationReason = getVoucherViolationReason(voucher as any, { subtotal });
+  const isEligible = !violationReason;
 
   const handleSelect = () => {
     if (isEligible && onSelect) {
@@ -104,15 +106,11 @@ export const VoucherCard: React.FC<VoucherCardProps> = ({
           </div>
         </div>
 
-        {/* Warning if subtotal not met */}
-        {!isEligible && (
+        {/* Warning if any voucher rule is violated */}
+        {!isEligible && violationReason && (
           <div className="mt-2.5 pt-2 border-t border-border-subtle/50 flex items-center gap-1.5 text-[10px] text-status-danger font-medium">
             <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-            <span>
-              {t("minPurchaseWarning", {
-                min: voucher.minPurchase.toLocaleString("id-ID"),
-              })}
-            </span>
+            <span>{violationReason}</span>
           </div>
         )}
       </div>

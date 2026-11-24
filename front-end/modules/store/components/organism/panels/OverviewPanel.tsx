@@ -36,7 +36,7 @@ export interface IOverviewPanelProps {
   onOpenRejectModal: (order: StoreOrder) => void;
   onOpenReceiptModal: (order: StoreOrder) => void;
   onConfirmReceived?: (orderId: string) => void;
-  onCompleteOrder?: (orderId: string) => void;
+  onCompleteOrder?: (orderId: string, cashReceived?: number) => void;
   isAdvancing?: boolean;
 }
 

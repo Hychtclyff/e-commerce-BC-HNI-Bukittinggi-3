@@ -8,6 +8,7 @@ import { TijarahInput } from "@/components/atom/tijarahInput";
 import { TijarahTextArea } from "@/components/atom/tijarahTextArea";
 import { TijarahSelect } from "@/components/atom/tijarahSelect";
 import { newsApi } from "../api/news.api";
+import { storeApi } from "@/modules/store/api/store.api";
 import type { NewsArticle, NewsCategory, NewsStatus, NewsPayload } from "../types/news.types";
 import { showToast } from "@/utils/toast";
 import { TijarahGoogleDocEditor } from "@/components/rich-editor/TijarahGoogleDocEditor";
@@ -30,6 +31,7 @@ import {
   Clock,
   Layers,
   ArrowLeft,
+  ExternalLink,
 } from "lucide-react";
 
 const CATEGORY_OPTIONS: Array<{ key: NewsCategory; label: string; badgeVariant: "primary" | "secondary" | "success" | "warning" }> = [
@@ -64,14 +66,20 @@ export const NewsPanel: React.FC = () => {
   const [isSaving, setIsSaving] = useState(false);
 
   // Form State
+  const [editorLang, setEditorLang] = useState<"id" | "en">("id");
   const [formTitle, setFormTitle] = useState("");
+  const [formTitleEn, setFormTitleEn] = useState("");
   const [formSlug, setFormSlug] = useState("");
   const [formCategory, setFormCategory] = useState<NewsCategory>("HERBAL");
   const [formStatus, setFormStatus] = useState<NewsStatus>("PUBLISHED");
   const [formThumbnail, setFormThumbnail] = useState("");
   const [formExcerpt, setFormExcerpt] = useState("");
+  const [formSummaryEn, setFormSummaryEn] = useState("");
   const [formContent, setFormContent] = useState("");
+  const [formContentEn, setFormContentEn] = useState("");
   const [formTags, setFormTags] = useState("");
+  const [formTaggedProductIds, setFormTaggedProductIds] = useState<string[]>([]);
+  const [availableProducts, setAvailableProducts] = useState<Array<{ id: string; sku: string; name: string }>>([]);
 
   const loadNews = async () => {
     setIsLoading(true);
@@ -87,31 +95,45 @@ export const NewsPanel: React.FC = () => {
 
   useEffect(() => {
     loadNews();
+    storeApi
+      .getInventory()
+      .then((items) => setAvailableProducts((items || []).map((i) => ({ id: i.id, sku: i.sku, name: i.name }))))
+      .catch(() => {});
   }, []);
 
   const openCreateModal = () => {
     setEditingArticle(null);
+    setEditorLang("id");
     setFormTitle("");
+    setFormTitleEn("");
     setFormSlug("");
     setFormCategory("HERBAL");
     setFormStatus("PUBLISHED");
     setFormThumbnail("");
     setFormExcerpt("");
+    setFormSummaryEn("");
     setFormContent("");
+    setFormContentEn("");
     setFormTags("herbal, hni, kesehatan");
+    setFormTaggedProductIds([]);
     setIsFormOpen(true);
   };
 
   const openEditModal = (art: NewsArticle) => {
     setEditingArticle(art);
+    setEditorLang("id");
     setFormTitle(art.title);
+    setFormTitleEn(art.titleEn || "");
     setFormSlug(art.slug);
     setFormCategory(art.category);
     setFormStatus(art.status);
     setFormThumbnail(art.thumbnailUrl || "");
-    setFormExcerpt(art.excerpt || "");
+    setFormExcerpt(art.excerpt || art.summary || "");
+    setFormSummaryEn(art.summaryEn || "");
     setFormContent(art.content);
+    setFormContentEn(art.contentEn || "");
     setFormTags((art.tags || []).join(", "));
+    setFormTaggedProductIds(art.taggedProductIds || []);
     setIsFormOpen(true);
   };
 
@@ -142,13 +164,17 @@ export const NewsPanel: React.FC = () => {
 
       const payload: NewsPayload = {
         title: formTitle.trim(),
+        titleEn: formTitleEn.trim() || undefined,
         slug: formSlug.trim() || formTitle.toLowerCase().replace(/\s+/g, "-"),
         category: formCategory,
         status: formStatus,
         thumbnailUrl: formThumbnail.trim() || undefined,
         excerpt: formExcerpt.trim() || formContent.slice(0, 160) + "...",
+        summaryEn: formSummaryEn.trim() || undefined,
         content: formContent.trim(),
+        contentEn: formContentEn.trim() || undefined,
         tags: tagsArray,
+        taggedProductIds: formTaggedProductIds,
       };
 
       if (editingArticle) {
@@ -198,7 +224,7 @@ export const NewsPanel: React.FC = () => {
     const q = search.toLowerCase();
     const matchesSearch =
       a.title.toLowerCase().includes(q) ||
-      a.excerpt.toLowerCase().includes(q) ||
+      (a.excerpt || a.summary || "").toLowerCase().includes(q) ||
       (a.tags && a.tags.some((t) => t.toLowerCase().includes(q)));
 
     const matchesCategory = selectedCategory === "ALL" || a.category === selectedCategory;
@@ -280,16 +306,52 @@ export const NewsPanel: React.FC = () => {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
           {/* Main Document Workspace (8 cols) */}
           <div className="lg:col-span-8 space-y-4">
+            {/* Language Toggle ID / EN */}
+            <div className="flex items-center justify-between gap-2 p-2.5 bg-surface border border-border-subtle rounded-xl">
+              <span className="text-xs font-bold text-text-muted px-2">
+                Bahasa Konten Artikel:
+              </span>
+              <div className="flex items-center gap-1.5 bg-canvas p-1 rounded-lg border border-border-subtle">
+                <button
+                  type="button"
+                  onClick={() => setEditorLang("id")}
+                  className={`px-3 py-1 rounded-md text-xs font-bold cursor-pointer ${
+                    editorLang === "id" ? "bg-primary-sage text-white" : "text-text-muted"
+                  }`}
+                >
+                  🇮🇩 Indonesia (Utama)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEditorLang("en")}
+                  className={`px-3 py-1 rounded-md text-xs font-bold cursor-pointer ${
+                    editorLang === "en" ? "bg-primary-sage text-white" : "text-text-muted"
+                  }`}
+                >
+                  🇬🇧 English Version
+                </button>
+              </div>
+            </div>
+
             {/* Judul Artikel Besar */}
             <div className="p-5 bg-surface border border-border-subtle mac-glass mac-shadow rounded-2xl space-y-2">
               <label className="text-xs font-bold text-text-primary uppercase tracking-wider block">
-                Judul Artikel / Berita <span className="text-status-danger">*</span>
+                {editorLang === "id" ? "Judul Artikel / Berita (ID)" : "Article Title (EN)"}{" "}
+                {editorLang === "id" && <span className="text-status-danger">*</span>}
               </label>
               <input
                 type="text"
-                placeholder="Tuliskan judul artikel berita yang menarik di sini..."
-                value={formTitle}
-                onChange={(e) => handleTitleChange(e.target.value)}
+                placeholder={
+                  editorLang === "id"
+                    ? "Tuliskan judul artikel berita yang menarik di sini..."
+                    : "Enter English article title (optional, falls back to ID if empty)..."
+                }
+                value={editorLang === "id" ? formTitle : formTitleEn}
+                onChange={(e) =>
+                  editorLang === "id"
+                    ? handleTitleChange(e.target.value)
+                    : setFormTitleEn(e.target.value)
+                }
                 className="w-full text-lg sm:text-xl font-black text-text-primary bg-canvas/40 border border-border-subtle rounded-xl px-4 py-3 placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-primary-sage transition-all"
               />
             </div>
@@ -297,12 +359,20 @@ export const NewsPanel: React.FC = () => {
             {/* Google Docs Editor Penuh */}
             <div className="space-y-2">
               <label className="text-xs font-bold text-text-primary uppercase tracking-wider block">
-                Lembar Dokumen Konten Lengkap (Google Docs Editor) <span className="text-status-danger">*</span>
+                {editorLang === "id"
+                  ? "Lembar Dokumen Konten Lengkap (ID)"
+                  : "Full Article Content (EN)"}{" "}
+                {editorLang === "id" && <span className="text-status-danger">*</span>}
               </label>
               <TijarahGoogleDocEditor
-                documentTitle={formTitle || "Draft Dokumen Artikel"}
-                value={formContent}
-                onChange={(html) => setFormContent(html)}
+                key={editorLang}
+                documentTitle={
+                  (editorLang === "id" ? formTitle : formTitleEn) || "Draft Dokumen Artikel"
+                }
+                value={editorLang === "id" ? formContent : formContentEn}
+                onChange={(html) =>
+                  editorLang === "id" ? setFormContent(html) : setFormContentEn(html)
+                }
                 minHeight="520px"
               />
             </div>
@@ -385,11 +455,21 @@ export const NewsPanel: React.FC = () => {
               </h4>
 
               <div>
-                <label className="text-xs font-bold text-text-primary block mb-1">Ringkasan Pendek (Excerpt)</label>
+                <label className="text-xs font-bold text-text-primary block mb-1">
+                  {editorLang === "id" ? "Ringkasan Pendek (ID)" : "Short Summary (EN)"}
+                </label>
                 <TijarahTextArea
-                  placeholder="1-2 kalimat ringkasan pengantar..."
-                  value={formExcerpt}
-                  onChange={(e) => setFormExcerpt(e.target.value)}
+                  placeholder={
+                    editorLang === "id"
+                      ? "1-2 kalimat ringkasan pengantar..."
+                      : "1-2 sentences English summary..."
+                  }
+                  value={editorLang === "id" ? formExcerpt : formSummaryEn}
+                  onChange={(e) =>
+                    editorLang === "id"
+                      ? setFormExcerpt(e.target.value)
+                      : setFormSummaryEn(e.target.value)
+                  }
                   className="text-xs min-h-[80px]"
                 />
               </div>
@@ -402,6 +482,57 @@ export const NewsPanel: React.FC = () => {
                   onChange={(e) => setFormTags(e.target.value)}
                   className="text-xs"
                 />
+              </div>
+
+              {/* Tag Produk Unggulan (#5EA17B35) */}
+              <div className="space-y-2 pt-2 border-t border-border-subtle">
+                <label className="text-xs font-bold text-text-primary block">
+                  Highlight / Tag Produk Terkait
+                </label>
+                <TijarahSelect
+                  aria-label="Tag Produk Terkait"
+                  selectedKey=""
+                  onSelectionChange={(key) => {
+                    const id = String(key || "");
+                    if (id && !formTaggedProductIds.includes(id)) {
+                      setFormTaggedProductIds((prev) => [...prev, id]);
+                    }
+                  }}
+                  placeholder="+ Pilih produk untuk di-highlight..."
+                >
+                  {availableProducts
+                    .filter((p) => !formTaggedProductIds.includes(p.id))
+                    .map((p) => (
+                      <TijarahSelect.Item key={p.id} id={p.id}>
+                        {p.sku} — {p.name}
+                      </TijarahSelect.Item>
+                    ))}
+                </TijarahSelect>
+                {formTaggedProductIds.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5">
+                    {formTaggedProductIds.map((pid) => {
+                      const prod = availableProducts.find((p) => p.id === pid);
+                      return (
+                        <span
+                          key={pid}
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary-sage/10 text-primary-sage border border-primary-sage/25 text-[11px] font-semibold"
+                        >
+                          <span>{prod ? prod.name : pid}</span>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setFormTaggedProductIds((prev) => prev.filter((id) => id !== pid))
+                            }
+                            className="hover:text-status-danger cursor-pointer"
+                            aria-label="Hapus tag produk"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </span>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             </TijarahCard>
           </div>
@@ -630,15 +761,26 @@ export const NewsPanel: React.FC = () => {
 
                 {/* Footer Action Buttons */}
                 <div className="p-3 border-t border-border-subtle/50 flex items-center justify-between bg-canvas/30">
-                  <TijarahButton
-                    size="sm"
-                    heroVariant="ghost"
-                    onClick={() => setPreviewArticle(art)}
-                    className="text-xs font-bold text-primary-sage flex items-center gap-1 px-2 h-7"
-                  >
-                    <Eye className="w-3.5 h-3.5" />
-                    <span>Baca</span>
-                  </TijarahButton>
+                  <div className="flex items-center gap-1">
+                    <TijarahButton
+                      size="sm"
+                      heroVariant="ghost"
+                      onClick={() => setPreviewArticle(art)}
+                      className="text-xs font-bold text-primary-sage flex items-center gap-1 px-2 h-7"
+                    >
+                      <Eye className="w-3.5 h-3.5" />
+                      <span>Preview</span>
+                    </TijarahButton>
+                    <a
+                      href={`/id/news/${art.id || art.slug}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs font-bold text-text-muted hover:text-primary-sage p-1.5 rounded-lg hover:bg-canvas transition-colors inline-flex items-center gap-1"
+                      title="Buka halaman publik artikel (slug)"
+                    >
+                      <ExternalLink className="w-3.5 h-3.5" />
+                    </a>
+                  </div>
 
                   <div className="flex items-center gap-1">
                     <TijarahButton

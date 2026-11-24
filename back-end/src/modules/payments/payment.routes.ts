@@ -7,6 +7,7 @@ import {
     codConfirmSchema,
     getReceiptSchema,
 } from "./payment.schema";
+import { requireStoreStaff } from "@/utils/authGuard";
 
 export async function paymentRoutes(route: FastifyInstance) {
     const server = route.withTypeProvider<ZodTypeProvider>();
@@ -17,11 +18,12 @@ export async function paymentRoutes(route: FastifyInstance) {
     // Sync status pembayaran langsung dari Xendit API
     server.get("/sync-status/:orderId", syncPaymentStatusSchema, paymentController.syncPaymentStatus);
 
-    // Admin confirm manual transfer
-    server.post("/admin/confirm-transfer", confirmTransferSchema, paymentController.confirmManualTransfer);
-
-    // Courier confirm COD
-    server.post("/orders/:orderId/cod-confirm", codConfirmSchema, paymentController.confirmCod);
+    // Admin & Courier protected routes
+    server.register(async (staff) => {
+        staff.addHook("preHandler", requireStoreStaff);
+        staff.post("/admin/confirm-transfer", confirmTransferSchema, paymentController.confirmManualTransfer);
+        staff.post("/orders/:orderId/cod-confirm", codConfirmSchema, paymentController.confirmCod);
+    });
 
     // View Receipt HTML
     server.get("/receipt/:orderId", getReceiptSchema, paymentController.getReceiptHtml);

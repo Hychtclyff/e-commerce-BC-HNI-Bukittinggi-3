@@ -8,11 +8,17 @@ import {
     searchHniByIdSchema,
 } from './profile.schema';
 import { profileController } from './profile.controller';
+import { requireAuth } from '@/utils/authGuard';
 
 export async function profileRoutes(route: FastifyInstance) {
     const server = route.withTypeProvider<ZodTypeProvider>();
 
-    // 1. Static search routes first to prevent conflict with /:id
+    // 1. Static search & wishlist routes first to prevent conflict with /:id
+    server.register(async (authed) => {
+        authed.addHook('preHandler', requireAuth);
+        authed.get('/wishlist', profileController.getWishlist);
+        authed.post('/wishlist/toggle', profileController.toggleWishlist);
+    });
     server.post(
         '/search-hni-by-id',
         searchHniByIdSchema,

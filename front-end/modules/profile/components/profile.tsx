@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { ProfileTabType, UserProfileData } from "../types/profile.types";
 import { useProfile } from "../hooks/useProfile";
 import { useUserAddresses } from "../hooks/useUserAddresses";
@@ -16,6 +16,7 @@ import { HniPanel } from "./organism/panels/HniPanel";
 import { KasbonPanel } from "./organism/panels/KasbonPanel";
 import { AddressesPanel } from "./organism/panels/AddressesPanel";
 import { OrdersPanel } from "./organism/panels/OrdersPanel";
+import { ReturnsProfilePanel } from "./organism/panels/ReturnsProfilePanel";
 import { VouchersPanel } from "./organism/panels/VouchersPanel";
 import { SettingsPanel } from "./organism/panels/SettingsPanel";
 import { NotificationsPanel } from "@/modules/notifications/components/NotificationsPanel";
@@ -35,7 +36,28 @@ const fallbackUser: UserProfileData = {
 };
 
 export function Profile() {
-  const [activeTab, setActiveTab] = useState<ProfileTabType>("overview");
+  const [activeTab, setActiveTabState] = useState<ProfileTabType>("overview");
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const urlTab = params.get("tab") as ProfileTabType | null;
+    const savedTab = sessionStorage.getItem("tijarah_profile_active_tab") as ProfileTabType | null;
+    const initialTab = urlTab || savedTab;
+    if (initialTab) {
+      setActiveTabState(initialTab);
+    }
+  }, []);
+
+  const setActiveTab = useCallback((nextTab: ProfileTabType) => {
+    setActiveTabState(nextTab);
+    if (typeof window !== "undefined") {
+      sessionStorage.setItem("tijarah_profile_active_tab", nextTab);
+      const url = new URL(window.location.href);
+      url.searchParams.set("tab", nextTab);
+      window.history.replaceState({}, "", url.toString());
+    }
+  }, []);
   const authUser = useAuthStore((state) => state.user);
   const logout = useAuthStore((state) => state.logout);
 
@@ -216,6 +238,8 @@ export function Profile() {
           )}
 
           {activeTab === "orders" && <OrdersPanel />}
+
+          {activeTab === "returns" && <OrdersPanel initialTab={"RETURNS" as any} />}
 
           {activeTab === "vouchers" && <VouchersPanel />}
 

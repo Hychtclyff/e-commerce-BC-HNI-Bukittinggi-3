@@ -141,7 +141,9 @@ export function useStoreErp() {
         config.invalidate.forEach((key) => queryClient.invalidateQueries({ queryKey: [...key] }));
       },
       onError: (error) => {
-        showToast.error(config.errorTitle, getErrorMessage(error));
+        if (!(error as any)?._toastShown) {
+          showToast.error(config.errorTitle, getErrorMessage(error));
+        }
       },
     });
 
@@ -284,11 +286,17 @@ export function useStoreErp() {
     errorTitle: "Gagal Konfirmasi",
     invalidate: ORDER_KEYS,
   });
-  const completeOrder = useStoreMutation((orderId: string) => storeApi.completeOrder(orderId), {
-    successTitle: "Pesanan Selesai",
-    errorTitle: "Gagal Menyelesaikan",
-    invalidate: [KEYS.orders, KEYS.customers, KEYS.userOrders, KEYS.userNotifications, KEYS.userNotificationsUnread],
-  });
+  const completeOrder = useStoreMutation(
+    (arg: string | { orderId: string; cashReceived?: number }) =>
+      typeof arg === "string"
+        ? storeApi.completeOrder(arg)
+        : storeApi.completeOrder(arg.orderId, arg.cashReceived),
+    {
+      successTitle: "Pesanan Selesai",
+      errorTitle: "Gagal Menyelesaikan",
+      invalidate: [KEYS.orders, KEYS.customers, KEYS.userOrders, KEYS.userNotifications, KEYS.userNotificationsUnread],
+    }
+  );
   const syncOrderToHsis = useStoreMutation(
     ({ orderId, payload }: { orderId: string; payload: { hsisTrxNumber: string; notes?: string } }) =>
       storeApi.syncOrderToHsis(orderId, payload),
@@ -315,6 +323,15 @@ export function useStoreErp() {
     ({ orderId, payload }: { orderId: string; payload: RejectOrderPayload }) =>
       storeApi.rejectOrder(orderId, payload),
     { successTitle: "Pesanan Ditolak", errorTitle: "Gagal Menolak", invalidate: ORDER_KEYS, tone: "warning" }
+  );
+  const confirmOrderRefund = useStoreMutation(
+    ({ orderId, refundProofUrl, adminNotes }: { orderId: string; refundProofUrl?: string; adminNotes?: string }) =>
+      storeApi.confirmOrderRefund(orderId, { refundProofUrl, adminNotes }),
+    { successTitle: "Refund Dikonfirmasi", errorTitle: "Gagal Konfirmasi Refund", invalidate: ORDER_KEYS }
+  );
+  const triggerPrintOrder = useStoreMutation(
+    (orderId: string) => storeApi.triggerPrintOrder(orderId),
+    { successTitle: "Status Print Diperbarui", errorTitle: "Gagal Update Status Print", invalidate: ORDER_KEYS }
   );
   const verifyPickupOrder = useStoreMutation(
     ({ orderId, notes }: { orderId: string; notes?: string }) =>
@@ -637,6 +654,9 @@ export function useStoreErp() {
     isBulkSyncingOrdersToHsis: bulkSyncOrdersToHsis.isPending,
     rejectOrder: rejectOrder.mutateAsync,
     isRejectingOrder: rejectOrder.isPending,
+    confirmOrderRefund: confirmOrderRefund.mutateAsync,
+    isConfirmingRefund: confirmOrderRefund.isPending,
+    triggerPrintOrder: triggerPrintOrder.mutateAsync,
     verifyPickupOrder: verifyPickupOrder.mutateAsync,
     isVerifyingPickup: verifyPickupOrder.isPending,
     createPosOrder: createPosOrder.mutateAsync,

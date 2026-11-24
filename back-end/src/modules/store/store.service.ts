@@ -9,6 +9,7 @@ import bcrypt from 'bcrypt';
 import { notificationsService } from '../notifications/notifications.service';
 import { cancelExpiredOrders } from '../orders/expireOrders';
 import { paymentEvents } from '../payments/paymentEvents';
+import { logStoreActivity } from '@/utils/auditLog';
 import { xenditService } from '../../config/xendit';
 import { SupportedLanguage, t } from '@/i18n';
 import { axiosClient, setRuntimeHsisAuth, getRuntimeHsisAuth } from '@/config/axios';
@@ -82,6 +83,16 @@ export const storeService = {
         o."trackingNumber",
         o.notes,
         o."rejectionReason",
+        o."cancellationReason",
+        o.refund_bank_name AS "refundBankName",
+        o.refund_account_number AS "refundAccountNumber",
+        o.refund_account_name AS "refundAccountName",
+        o.refund_proof_url AS "refundProofUrl",
+        o.cash_received AS "cashReceived",
+        COALESCE(o.print_status, 'NOT_PRINTED') AS "printStatus",
+        o.printed_at AS "printedAt",
+        COALESCE(o.refund_confirmed_by_user, FALSE) AS "refundConfirmedByUser",
+        o.refund_confirmed_at AS "refundConfirmedAt",
         o."createdAt",
         o."updatedAt",
         o."shippingType",
@@ -200,6 +211,16 @@ export const storeService = {
       updatedAt: new Date().toISOString(),
     });
 
+    await logStoreActivity({
+      actorId: sig.userId,
+      actorEmail: sig.signerName,
+      actorRole: 'STAFF',
+      action: 'APPROVE_ORDER',
+      module: 'ORDERS',
+      entityId: orderId,
+      summary: `Menyetujui pesanan ${orderNumber} menjadi PROCESSING`,
+    });
+
     if (userId) {
       await notificationsService.createNotification({
         userId,
@@ -246,6 +267,16 @@ export const storeService = {
       updatedAt: new Date().toISOString(),
     });
 
+    await logStoreActivity({
+      actorId: sig.userId,
+      actorEmail: sig.signerName,
+      actorRole: 'STAFF',
+      action: 'SHIP_ORDER',
+      module: 'ORDERS',
+      entityId: orderId,
+      summary: `Mengirim pesanan ${orderNumber} via ${courier} (Resi: ${payload.trackingNumber || '-'})`,
+    });
+
     if (userId) {
       await notificationsService.createNotification({
         userId,
@@ -286,7 +317,12 @@ export const storeService = {
     return { success: true, message: 'Konfirmasi barang telah diterima oleh pembeli' };
   },
 
-  async completeOrder(orderId: string, actor?: { userId?: string; fullName?: string }, lang: SupportedLanguage = 'id') {
+  async completeOrder(
+    orderId: string,
+    actor?: { userId?: string; fullName?: string },
+    lang: SupportedLanguage = 'id',
+    cashReceived?: number
+  ) {
     const sig = await this.requireEmployeeSignature(actor, lang);
     const existing = await pool.query('SELECT * FROM orders.orders WHERE id = $1', [orderId]);
     if (existing.rows.length === 0) throw new AppError('Pesanan tidak ditemukan', 404);
@@ -294,16 +330,22 @@ export const storeService = {
     const userId = order.userId || order["userId"];
     const orderNumber = order.orderNumber || order["orderNumber"];
 
+    const resolvedCash =
+      cashReceived !== undefined && Number.isFinite(Number(cashReceived))
+        ? Number(cashReceived)
+        : null;
+
     await pool.query(
       `UPDATE orders.orders 
        SET "orderStatus" = 'COMPLETED',
            "paymentStatus" = CASE WHEN "paymentStatus" = 'UNPAID' THEN 'PAID' ELSE "paymentStatus" END,
+           cash_received = COALESCE($5, cash_received),
            acted_by_user_id = $1,
            acted_by_name = $2,
            acted_by_signature_code = $3,
            "updatedAt" = NOW()
        WHERE id = $4`,
-      [sig.userId, sig.signerName, sig.verificationCode, orderId]
+      [sig.userId, sig.signerName, sig.verificationCode, orderId, resolvedCash]
     );
 
     paymentEvents.emitOrderUpdated({
@@ -313,6 +355,17 @@ export const storeService = {
       paymentStatus: order.paymentStatus === 'UNPAID' ? 'PAID' : order.paymentStatus,
       orderStatus: 'COMPLETED',
       updatedAt: new Date().toISOString(),
+    });
+
+    await logStoreActivity({
+      actorId: sig.userId,
+      actorEmail: sig.signerName,
+      actorRole: 'STAFF',
+      action: 'COMPLETE_ORDER',
+      module: 'ORDERS',
+      entityId: orderId,
+      summary: `Menyelesaikan pesanan ${orderNumber}${resolvedCash !== null ? ` (Uang tunai diterima: Rp ${resolvedCash.toLocaleString('id-ID')})` : ''}`,
+      metadata: resolvedCash !== null ? { cashReceived: resolvedCash } : null,
     });
 
     if (userId) {
@@ -599,6 +652,25 @@ export const storeService = {
       [sig.userId, sig.signerName, sig.verificationCode, orderId]
     );
 
+    paymentEvents.emitOrderUpdated({
+      orderId,
+      slug: order.slug,
+      orderNumber,
+      paymentStatus: order.paymentStatus,
+      orderStatus: 'READY_FOR_PICKUP',
+      updatedAt: new Date().toISOString(),
+    });
+
+    await logStoreActivity({
+      actorId: sig.userId,
+      actorEmail: sig.signerName,
+      actorRole: 'STAFF',
+      action: 'READY_FOR_PICKUP',
+      module: 'ORDERS',
+      entityId: orderId,
+      summary: `Menandai pesanan ${orderNumber} siap diambil di outlet`,
+    });
+
     if (userId) {
       await notificationsService.createNotification({
         userId,
@@ -619,26 +691,159 @@ export const storeService = {
     const order = existing.rows[0];
     const userId = order.userId || order["userId"];
     const orderNumber = order.orderNumber || order["orderNumber"];
+    const wasPaid = String(order.paymentStatus || '').toUpperCase() === 'PAID';
+    const isCreditLimit = String(order.paymentMethod || '').toUpperCase() === 'CREDIT_LIMIT';
+    const nextPaymentStatus = wasPaid ? (isCreditLimit ? 'REFUNDED' : 'REFUND_PENDING') : order.paymentStatus;
 
     await pool.query(
       `UPDATE orders.orders 
-       SET "orderStatus" = 'REJECTED', "rejectionReason" = $1,
-           acted_by_user_id = $2, acted_by_name = $3, acted_by_signature_code = $4, "updatedAt" = NOW()
-       WHERE id = $5`,
-      [reason, sig.userId, sig.signerName, sig.verificationCode, orderId]
+       SET "orderStatus" = 'REJECTED', "rejectionReason" = $1, "paymentStatus" = $2,
+           acted_by_user_id = $3, acted_by_name = $4, acted_by_signature_code = $5, "updatedAt" = NOW()
+       WHERE id = $6`,
+      [reason, nextPaymentStatus, sig.userId, sig.signerName, sig.verificationCode, orderId]
     );
+
+    // Pulihkan stok produk untuk pesanan yang ditolak
+    const itemsRes = await pool.query(
+      `SELECT "productId", qty FROM orders.order_items WHERE "orderId" = $1`,
+      [orderId]
+    );
+    for (const item of itemsRes.rows) {
+      if (item.productId && Number(item.qty) > 0) {
+        await pool.query(
+          `UPDATE products.products SET stock = COALESCE(stock, 0) + $1 WHERE id = $2`,
+          [Number(item.qty), item.productId]
+        );
+      }
+    }
+
+    // Jika pembayaran pakai plafon kasbon, pulihkan saldo kasbon
+    if (isCreditLimit && userId && Number(order.totalAmount || 0) > 0) {
+      await pool.query(
+        `UPDATE users.credit_accounts
+         SET current_balance = GREATEST(0, current_balance - $1), updated_at = NOW()
+         WHERE user_id = $2`,
+        [Number(order.totalAmount), userId]
+      );
+    }
+
+    paymentEvents.emitOrderUpdated({
+      orderId,
+      slug: order.slug,
+      orderNumber,
+      paymentStatus: nextPaymentStatus,
+      orderStatus: 'REJECTED',
+      updatedAt: new Date().toISOString(),
+    });
+
+    await logStoreActivity({
+      actorId: sig.userId,
+      actorEmail: sig.signerName,
+      actorRole: 'STAFF',
+      action: 'REJECT_ORDER',
+      module: 'ORDERS',
+      entityId: orderId,
+      summary: `Menolak pesanan ${orderNumber}${wasPaid ? ' (Dana masuk antrean refund)' : ''}: ${reason || '-'}`,
+    });
 
     if (userId) {
       await notificationsService.createNotification({
         userId,
         title: 'Pesanan Ditolak Toko',
-        message: `Mohon maaf, pesanan #${orderNumber} tidak dapat diproses: ${reason || 'Kendala ketersediaan stok produk atau operasional toko'}. Saldo plafon kasbon (jika ada) telah dipulihkan.`,
+        message: wasPaid && !isCreditLimit
+          ? `Mohon maaf, pesanan #${orderNumber} ditolak: ${reason || 'Kendala stok/operasional'}. Pesanan sudah dibayar akan diproses pengembalian dananya (REFUND_PENDING).`
+          : `Mohon maaf, pesanan #${orderNumber} tidak dapat diproses: ${reason || 'Kendala ketersediaan stok produk atau operasional toko'}. Saldo plafon kasbon (jika ada) telah dipulihkan.`,
         category: 'ORDER_STATUS',
         referenceId: orderId,
       });
     }
 
-    return { success: true, message: 'Pesanan ditolak' };
+    return { success: true, message: wasPaid && !isCreditLimit ? 'Pesanan ditolak & masuk antrean refund dana' : 'Pesanan ditolak' };
+  },
+
+  async confirmOrderRefund(
+    orderId: string,
+    payload: { refundProofUrl?: string; adminNotes?: string },
+    actor?: { userId?: string; fullName?: string },
+    lang: SupportedLanguage = 'id'
+  ) {
+    const sig = await this.requireEmployeeSignature(actor, lang);
+    const existing = await pool.query('SELECT * FROM orders.orders WHERE id = $1', [orderId]);
+    if (existing.rows.length === 0) throw new AppError('Pesanan tidak ditemukan', 404);
+    const order = existing.rows[0];
+    const userId = order.userId || order['userId'];
+    const orderNumber = order.orderNumber || order['orderNumber'];
+
+    await pool.query(
+      `UPDATE orders.orders
+       SET "paymentStatus" = 'REFUNDED',
+           refund_proof_url = COALESCE($1, refund_proof_url),
+           acted_by_user_id = $2,
+           acted_by_name = $3,
+           acted_by_signature_code = $4,
+           "updatedAt" = NOW()
+       WHERE id = $5`,
+      [payload.refundProofUrl?.trim() || null, sig.userId, sig.signerName, sig.verificationCode, orderId]
+    );
+
+    paymentEvents.emitOrderUpdated({
+      orderId,
+      slug: order.slug,
+      orderNumber,
+      paymentStatus: 'REFUNDED',
+      orderStatus: order.orderStatus,
+      updatedAt: new Date().toISOString(),
+    });
+
+    await logStoreActivity({
+      actorId: sig.userId,
+      actorEmail: sig.signerName,
+      actorRole: 'STAFF',
+      action: 'CONFIRM_REFUND',
+      module: 'ORDERS',
+      entityId: orderId,
+      summary: `Mengonfirmasi pengembalian dana pesanan ${orderNumber}${payload.adminNotes ? `: ${payload.adminNotes}` : ''}`,
+    });
+
+    if (userId) {
+      await notificationsService.createNotification({
+        userId,
+        title: 'Pengembalian Dana Selesai',
+        message: `Dana untuk pesanan #${orderNumber} telah dikembalikan oleh toko.${payload.adminNotes ? ` Catatan: ${payload.adminNotes}` : ''}`,
+        category: 'ORDER_STATUS',
+        referenceId: orderId,
+      });
+    }
+
+    return { success: true, message: 'Pengembalian dana berhasil dikonfirmasi (REFUNDED).' };
+  },
+
+  async triggerPrintOrder(
+    orderId: string,
+    actor?: { userId?: string; fullName?: string }
+  ) {
+    const existing = await pool.query('SELECT id, "orderNumber" FROM orders.orders WHERE id = $1', [orderId]);
+    if (existing.rows.length === 0) throw new AppError('Pesanan tidak ditemukan', 404);
+    const order = existing.rows[0];
+
+    await pool.query(
+      `UPDATE orders.orders
+       SET print_status = 'PRINTED', printed_at = NOW(), "updatedAt" = NOW()
+       WHERE id = $1`,
+      [orderId]
+    );
+
+    await logStoreActivity({
+      actorId: actor?.userId || null,
+      actorEmail: actor?.fullName || 'STAFF',
+      actorRole: 'STAFF',
+      action: 'PRINT_ORDER',
+      module: 'ORDERS',
+      entityId: orderId,
+      summary: `Mencetak resi pesanan ${order.orderNumber}`,
+    });
+
+    return { success: true, message: `Resi pesanan ${order.orderNumber} ditandai sudah diprint.`, printStatus: 'PRINTED' };
   },
 
   // ==========================================
@@ -681,6 +886,7 @@ export const storeService = {
         sku,
         name,
         category,
+        unit,
         "normalPrice" as price,
         "agentPrice",
         stock,
@@ -699,6 +905,7 @@ export const storeService = {
         "createdAt",
         "updatedAt"
       FROM products.products
+      WHERE COALESCE("isActive", true) = true
       ORDER BY "createdAt" DESC
     `);
 
@@ -710,7 +917,7 @@ export const storeService = {
         sku: row.sku || `SKU-${row.id.slice(0, 6)}`,
         name: row.name,
         category: row.category || 'Herbal',
-        unit: row.is_fraction ? 'SACHET' : 'BOTOL',
+        unit: row.unit || (row.is_fraction ? 'Sachet' : 'Botol'),
         stock: Number(row.stock) || 0,
         safetyStock: 10,
         allocatedStock: 2,
@@ -742,6 +949,9 @@ export const storeService = {
     const defaultBreakdownQty = payload.defaultBreakdownQty ? Number(payload.defaultBreakdownQty) : 20;
     const autoBreakdownOneStock = Boolean(payload.autoBreakdownOneStock);
     const rawStock = Number(payload.stock || 0);
+    if (rawStock < 0 || Number(payload.price || 0) < 0 || Number(payload.agentPrice || 0) < 0) {
+      throw new AppError('Stok dan harga produk tidak boleh bernilai negatif (minus).', 400);
+    }
 
     // Validasi pencegahan stok induk minus jika trigger ecerkan 1 stok aktif
     if (isSeparable && autoBreakdownOneStock && rawStock < 1) {
@@ -756,16 +966,17 @@ export const storeService = {
 
     const res = await pool.query(
       `INSERT INTO products.products 
-       (id, sku, name, category, "normalPrice", "agentPrice", stock, "tpPoints", description, "imageUrl", "isActive",
+       (id, sku, name, category, unit, "normalPrice", "agentPrice", stock, "tpPoints", description, "imageUrl", "isActive",
         is_separable, default_breakdown_qty, is_fraction, parent_product_id, allow_agent_price, reward_points, physical_stock, point_stock,
         "createdAt", "updatedAt")
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, true, $11, $12, $13, $14, $15, $16, $17, $18, NOW(), NOW())
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, true, $12, $13, $14, $15, $16, $17, $18, $19, NOW(), NOW())
        RETURNING *`,
       [
         id,
         payload.sku,
         payload.name,
-        payload.category || 'Herbal',
+        payload.category || 'Perawatan & Herba',
+        payload.unit || 'Pcs',
         payload.price,
         payload.allowAgentPrice === false ? payload.price : (payload.agentPrice || payload.price * 0.85),
         initialStock,
@@ -782,6 +993,13 @@ export const storeService = {
         pointStock,
       ]
     );
+
+    await logStoreActivity({
+      action: 'CREATE_INVENTORY',
+      module: 'INVENTORY',
+      entityId: id,
+      summary: `Menambahkan produk baru: ${payload.name} (${payload.sku})`,
+    });
 
     const parentProduct = res.rows[0];
 
@@ -816,6 +1034,13 @@ export const storeService = {
 
   async updateInventory(id: string, payload: any) {
     await this.ensureProductEceranColumns();
+    if (
+      (payload.stock !== undefined && Number(payload.stock) < 0) ||
+      (payload.price !== undefined && Number(payload.price) < 0) ||
+      (payload.agentPrice !== undefined && Number(payload.agentPrice) < 0)
+    ) {
+      throw new AppError('Stok dan harga produk tidak boleh bernilai negatif (minus).', 400);
+    }
     const isSeparable = payload.isSeparable !== undefined ? Boolean(payload.isSeparable) : null;
     const defaultBreakdownQty = payload.defaultBreakdownQty !== undefined ? (payload.defaultBreakdownQty ? Number(payload.defaultBreakdownQty) : null) : null;
 
@@ -824,6 +1049,7 @@ export const storeService = {
        SET name = COALESCE($1, name),
            sku = COALESCE($2, sku),
            category = COALESCE($3, category),
+           unit = COALESCE($17, unit),
            "normalPrice" = COALESCE($4, "normalPrice"),
            "agentPrice" = COALESCE($5, "agentPrice"),
            stock = COALESCE($6, stock),
@@ -856,8 +1082,15 @@ export const storeService = {
         payload.pointStock !== undefined ? Number(payload.pointStock) : null,
         payload.imageUrl !== undefined ? payload.imageUrl : null,
         id,
+        payload.unit || null,
       ]
     );
+    await logStoreActivity({
+      action: 'UPDATE_INVENTORY',
+      module: 'INVENTORY',
+      entityId: id,
+      summary: `Memperbarui data produk ${payload.name || id}`,
+    });
     return res.rows[0];
   },
 
@@ -1074,9 +1307,26 @@ export const storeService = {
   },
 
   async deleteInventory(id: string) {
-    const res = await pool.query('DELETE FROM products.products WHERE id = $1', [id]);
-    if ((res.rowCount ?? 0) === 0) throw new AppError('Produk tidak ditemukan', 404);
-    return true;
+    const existing = await pool.query('SELECT id, name FROM products.products WHERE id = $1 LIMIT 1', [id]);
+    if (existing.rows.length === 0) {
+      return { id, deleted: true, alreadyRemoved: true };
+    }
+    const productName = existing.rows[0].name;
+
+    try {
+      await pool.query('DELETE FROM products.products WHERE id = $1', [id]);
+    } catch {
+      // Soft-delete if product is referenced by historical order_items
+      await pool.query('UPDATE products.products SET "isActive" = false, stock = 0, "updatedAt" = NOW() WHERE id = $1', [id]);
+    }
+
+    await logStoreActivity({
+      action: 'DELETE_INVENTORY',
+      module: 'INVENTORY',
+      entityId: id,
+      summary: `Menghapus produk ${productName} (${id})`,
+    });
+    return { id, deleted: true };
   },
 
   // ==========================================
@@ -1351,8 +1601,48 @@ export const storeService = {
   // ==========================================
   // 5. STAF & AGEN
   // ==========================================
-  async getAgents() {
-    const res = await pool.query('SELECT * FROM store.agents ORDER BY created_at ASC');
+  async getAgents(query: {
+    role?: string;
+    position?: string;
+    status?: string;
+    search?: string;
+    includePartners?: string;
+  } = {}) {
+    // Default: Staf Toko hanya staf internal gerai (bukan mitra hasil sync penjualan HSIS)
+    const conditions: string[] = [];
+    if (query.includePartners !== 'true') {
+      conditions.push(`COALESCE(source_channel, 'TIJARAH') <> 'HSIS_SYNC'`);
+      conditions.push(`UPPER(COALESCE(role, '')) IN ('OWNER', 'MANAGER', 'ADMIN', 'KASIR', 'GUDANG')`);
+    }
+    const values: any[] = [];
+
+    if (query.role && query.role !== 'ALL') {
+      values.push(query.role.trim().toUpperCase());
+      conditions.push(`UPPER(COALESCE(role, '')) = $${values.length}`);
+    }
+
+    if (query.position && query.position !== 'ALL') {
+      values.push(query.position.trim().toUpperCase());
+      conditions.push(`UPPER(COALESCE(rank, '')) = $${values.length}`);
+    }
+
+    if (query.status && query.status !== 'ALL') {
+      values.push(query.status.trim().toUpperCase());
+      conditions.push(`UPPER(COALESCE(status, '')) = $${values.length}`);
+    }
+
+    if (query.search && query.search.trim()) {
+      values.push(`%${query.search.trim()}%`);
+      conditions.push(
+        `(name ILIKE $${values.length} OR hni_id ILIKE $${values.length} OR phone ILIKE $${values.length} OR COALESCE(email, '') ILIKE $${values.length})`
+      );
+    }
+
+    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+    const res = await pool.query(
+      `SELECT * FROM store.agents ${whereClause} ORDER BY created_at ASC`,
+      values
+    );
     return res.rows.map((r) => ({
       id: r.id,
       name: r.name,
@@ -1877,6 +2167,9 @@ export const storeService = {
     const res = await pool.query(`
       SELECT 
         pk.id,
+        pk.product_id,
+        p.name AS linked_product_name,
+        p.sku AS linked_product_sku,
         pk.name,
         pk.hni_code as sku,
         pk.category,
@@ -1900,13 +2193,17 @@ export const storeService = {
           ) FILTER (WHERE pt.id IS NOT NULL), '[]'
         ) as testimonials
       FROM store.product_knowledge pk
+      LEFT JOIN products.products p ON p.id = pk.product_id
       LEFT JOIN store.product_testimonials pt ON pt.product_id = pk.id
-      GROUP BY pk.id
+      GROUP BY pk.id, p.name, p.sku
       ORDER BY pk.created_at ASC
     `);
 
     return res.rows.map((r) => ({
       id: r.id,
+      productId: r.product_id || null,
+      linkedProductName: r.linked_product_name || null,
+      linkedProductSku: r.linked_product_sku || null,
       sku: r.sku,
       name: r.name,
       category: r.category,
@@ -1922,14 +2219,24 @@ export const storeService = {
   },
 
   async createProductKnowledge(payload: any) {
+    if (payload.productId) {
+      const dup = await pool.query(
+        `SELECT id, name FROM store.product_knowledge WHERE product_id = $1 LIMIT 1`,
+        [payload.productId]
+      );
+      if (dup.rows.length > 0) {
+        throw new AppError(`Produk ini sudah memiliki relasi khasiat (${dup.rows[0].name}). Relasi bersifat 1-to-1.`, 400);
+      }
+    }
     const id = `PK-${Date.now().toString().slice(-4)}`;
     const res = await pool.query(
       `INSERT INTO store.product_knowledge 
-       (id, name, hni_code, category, benefits, composition, bpom_number, halal_status, usage_guidelines, image_url, gallery_urls)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+       (id, product_id, name, hni_code, category, benefits, composition, bpom_number, halal_status, usage_guidelines, image_url, gallery_urls)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
        RETURNING *`,
       [
         id,
+        payload.productId || null,
         payload.name,
         payload.sku,
         payload.category,
@@ -1946,20 +2253,31 @@ export const storeService = {
   },
 
   async updateProductKnowledge(id: string, payload: any) {
+    if (payload.productId) {
+      const dup = await pool.query(
+        `SELECT id, name FROM store.product_knowledge WHERE product_id = $1 AND id <> $2 LIMIT 1`,
+        [payload.productId, id]
+      );
+      if (dup.rows.length > 0) {
+        throw new AppError(`Produk ini sudah tertaut ke khasiat lain (${dup.rows[0].name}). Relasi bersifat 1-to-1.`, 400);
+      }
+    }
     const res = await pool.query(
       `UPDATE store.product_knowledge
-       SET name = COALESCE($1, name),
-           category = COALESCE($2, category),
-           benefits = COALESCE($3, benefits),
-           composition = COALESCE($4, composition),
-           bpom_number = COALESCE($5, bpom_number),
-           halal_status = COALESCE($6, halal_status),
-           usage_guidelines = COALESCE($7, usage_guidelines),
-           image_url = COALESCE($8, image_url),
+       SET product_id = COALESCE($1, product_id),
+           name = COALESCE($2, name),
+           category = COALESCE($3, category),
+           benefits = COALESCE($4, benefits),
+           composition = COALESCE($5, composition),
+           bpom_number = COALESCE($6, bpom_number),
+           halal_status = COALESCE($7, halal_status),
+           usage_guidelines = COALESCE($8, usage_guidelines),
+           image_url = COALESCE($9, image_url),
            updated_at = NOW()
-       WHERE id = $9
+       WHERE id = $10
        RETURNING *`,
       [
+        payload.productId ?? null,
         payload.name,
         payload.category,
         payload.benefits,
@@ -3083,6 +3401,8 @@ export const storeService = {
   async getSystemUsers(query: {
     search?: string;
     userType?: string;
+    role?: string;
+    position?: string;
     isActive?: string;
     page?: number;
     limit?: number;
@@ -3114,6 +3434,20 @@ export const storeService = {
       paramIndex++;
     }
 
+    if (query.role && query.role !== 'ALL') {
+      conditions.push(`UPPER(COALESCE(ag.role, '')) = UPPER($${paramIndex})`);
+      values.push(query.role.trim());
+      paramIndex++;
+    }
+
+    if (query.position && query.position !== 'ALL') {
+      conditions.push(
+        `UPPER(COALESCE(NULLIF(hp.rank, ''), NULLIF(hp."rankMarketing", ''), NULLIF(ag.rank, ''), '')) = UPPER($${paramIndex})`
+      );
+      values.push(query.position.trim());
+      paramIndex++;
+    }
+
     if (query.isActive !== undefined && query.isActive !== 'ALL' && query.isActive !== '') {
       const boolVal = query.isActive === 'true';
       conditions.push(`u."isActive" = $${paramIndex}`);
@@ -3127,6 +3461,7 @@ export const storeService = {
       `SELECT COUNT(DISTINCT u.id)::int as total
        FROM core_auth.users u
        LEFT JOIN core_auth.hni_profiles hp ON hp."userId" = u.id AND hp."isDeleted" = false
+       LEFT JOIN store.agents ag ON (ag.email = u.email OR ag.phone = u."phoneNumber")
        ${whereClause}`,
       values
     );
@@ -3152,7 +3487,8 @@ export const storeService = {
         COALESCE(ord."orderCount", 0) as "orderCount",
         COALESCE(ord."totalSpent", 0) as "totalSpent",
         ag.role as "agentRole",
-        ag.tier as "agentTier"
+        ag.tier as "agentTier",
+        ag.rank as "agentRank"
       FROM core_auth.users u
       LEFT JOIN core_auth.hni_profiles hp ON hp."userId" = u.id AND hp."isDeleted" = false
       LEFT JOIN store.agents ag ON (ag.email = u.email OR ag.phone = u."phoneNumber")
@@ -3169,7 +3505,29 @@ export const storeService = {
     `;
 
     values.push(limit, offset);
-    const res = await pool.query(sql, values);
+    const [res, facetRolesRes, facetPositionsRes] = await Promise.all([
+      pool.query(sql, values),
+      pool.query(`SELECT DISTINCT role FROM store.agents WHERE role IS NOT NULL AND TRIM(role) <> ''`),
+      pool.query(`
+        SELECT DISTINCT pos FROM (
+          SELECT rank AS pos FROM store.agents WHERE rank IS NOT NULL AND TRIM(rank) <> ''
+          UNION
+          SELECT rank AS pos FROM core_auth.hni_profiles WHERE rank IS NOT NULL AND TRIM(rank) <> ''
+          UNION
+          SELECT "rankMarketing" AS pos FROM core_auth.hni_profiles WHERE "rankMarketing" IS NOT NULL AND TRIM("rankMarketing") <> ''
+        ) p
+      `),
+    ]);
+
+    const rolesSet = new Set<string>(['OWNER', 'ADMIN', 'KASIR', 'GUDANG', 'AGEN_HNI']);
+    for (const row of facetRolesRes.rows) {
+      rolesSet.add(String(row.role).trim().toUpperCase());
+    }
+
+    const positionsSet = new Set<string>(['AB', 'A', 'M', 'M - SC', 'ED', 'LED']);
+    for (const row of facetPositionsRes.rows) {
+      positionsSet.add(String(row.pos).trim());
+    }
 
     return {
       users: res.rows.map((r) => ({
@@ -3192,12 +3550,18 @@ export const storeService = {
             isVerified: r.hniIsVerified ?? true,
           }
           : null,
-        agentMeta: r.agentRole ? { role: r.agentRole, tier: r.agentTier } : null,
+        agentMeta: r.agentRole
+          ? { role: r.agentRole, tier: r.agentTier, rank: r.agentRank || r.hniRank || null }
+          : null,
         metrics: {
           orderCount: Number(r.orderCount) || 0,
           totalSpent: Number(r.totalSpent) || 0,
         },
       })),
+      facets: {
+        roles: Array.from(rolesSet),
+        positions: Array.from(positionsSet),
+      },
       pagination: {
         page,
         limit,

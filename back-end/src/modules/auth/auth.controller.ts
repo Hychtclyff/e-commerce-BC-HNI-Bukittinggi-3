@@ -262,7 +262,68 @@ export const authController = {
             }
             throw error;
         }
-    }
+    },
+
+    async forgotPassword(request: FastifyRequest<{ Body: { email: string } }>, reply: FastifyReply) {
+        const lang = getLanguageFromRequest(request);
+        try {
+            const data = await authService.forgotPassword(request.body.email, lang);
+            return responseUtil.success({ reply, message: data.message, data });
+        } catch (error: any) {
+            if (error instanceof AppError) return responseUtil.appError(reply, error);
+            throw error;
+        }
+    },
+
+    async resetPassword(request: FastifyRequest<{ Body: { token: string; newPassword: string } }>, reply: FastifyReply) {
+        const lang = getLanguageFromRequest(request);
+        try {
+            const data = await authService.resetPassword(request.body.token, request.body.newPassword, lang);
+            return responseUtil.success({ reply, message: data.message, data });
+        } catch (error: any) {
+            if (error instanceof AppError) return responseUtil.appError(reply, error);
+            throw error;
+        }
+    },
+
+    async changePassword(request: FastifyRequest<{ Body: { currentPassword: string; newPassword: string } }>, reply: FastifyReply) {
+        const lang = getLanguageFromRequest(request);
+        const userId = (request as any).user?.id;
+        if (!userId) {
+            return responseUtil.unauthorized(reply, t('common.unauthorized', {}, lang));
+        }
+        try {
+            const data = await authService.changePassword(
+                userId,
+                request.body.currentPassword,
+                request.body.newPassword,
+                lang
+            );
+            return responseUtil.success({ reply, message: data.message, data });
+        } catch (error: any) {
+            if (error instanceof AppError) return responseUtil.appError(reply, error);
+            throw error;
+        }
+    },
+
+    async refresh(request: FastifyRequest<{ Body: { refreshToken?: string } }>, reply: FastifyReply) {
+        const lang = getLanguageFromRequest(request);
+        const refreshToken =
+            request.body?.refreshToken ||
+            (request.headers['x-refresh-token'] as string) ||
+            '';
+        try {
+            const data = await authService.refreshSession(refreshToken, lang);
+            return responseUtil.success({
+                reply,
+                message: lang === 'en' ? 'Session refreshed.' : 'Sesi berhasil diperbarui.',
+                data,
+            });
+        } catch (error: any) {
+            if (error instanceof AppError) return responseUtil.appError(reply, error);
+            throw error;
+        }
+    },
 };
 
 

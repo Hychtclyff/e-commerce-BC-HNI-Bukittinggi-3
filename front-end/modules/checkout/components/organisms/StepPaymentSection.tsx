@@ -34,6 +34,7 @@ export const StepPaymentSection: React.FC = () => {
     processCheckout,
     isSubmitting,
     error,
+    setIsItemsSheetOpen,
   } = useCheckoutContext();
 
   const [vouchers, setVouchers] = useState<VoucherItem[]>([]);
@@ -148,6 +149,9 @@ export const StepPaymentSection: React.FC = () => {
             onExecuteCheckout={processCheckout}
             isSubmitting={isSubmitting}
             isAgent={isAgent}
+            shippingType={shippingType}
+            paymentMethod={paymentMethod}
+            onOpenItemsSheet={() => setIsItemsSheetOpen(true)}
           />
         </div>
       </div>

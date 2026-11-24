@@ -54,7 +54,9 @@ export const profileApi = {
     const endpoint = id ? `/profile/${id}` : "/auth/profile";
     const res = await apiClient.get(endpoint, {
       params: lang ? { lang } : undefined,
-    });
+      skipAuthRedirect: true,
+      skipGlobalToast: true,
+    } as any);
     const data = res.data?.data ?? res.data;
 
     // Normalisasi struktur jika backend mengembalikan data user langsung
@@ -94,7 +96,10 @@ export const profileApi = {
   async getCreditAccount(userId?: string): Promise<B2BCreditProfileData> {
     const id = resolveUserId(userId);
     const endpoint = id ? `/credit/account/${id}` : "/credit/account";
-    const res = await apiClient.get(endpoint);
+    const res = await apiClient.get(endpoint, {
+      skipAuthRedirect: true,
+      skipGlobalToast: true,
+    } as any);
     return res.data?.data ?? res.data;
   },
 
@@ -125,7 +130,10 @@ export const profileApi = {
   async getAddresses(userId?: string): Promise<AddressData[]> {
     const id = resolveUserId(userId);
     const endpoint = id ? `/user/addresses/${id}` : "/user/addresses";
-    const res = await apiClient.get(endpoint);
+    const res = await apiClient.get(endpoint, {
+      skipAuthRedirect: true,
+      skipGlobalToast: true,
+    } as any);
     return res.data?.data ?? res.data ?? [];
   },
 
@@ -262,14 +270,20 @@ export const profileApi = {
 
   /**
    * POST /api/v1/user/orders/:id/cancel
-   * Membatalkan pesanan (jika PENDING_PAYMENT)
+   * Membatalkan pesanan (jika PENDING_PAYMENT / WAITING_APPROVAL / PROCESSING <= 1 jam)
    */
   async cancelOrder(
     orderId: string,
-    reason?: string
+    reason?: string,
+    refundDetails?: {
+      refundBankName?: string;
+      refundAccountNumber?: string;
+      refundAccountName?: string;
+    }
   ): Promise<{ success: boolean; message: string; data?: any }> {
     const res = await apiClient.post(`/user/orders/${orderId}/cancel`, {
       reason,
+      ...refundDetails,
     });
     return res.data;
   },

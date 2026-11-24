@@ -1,9 +1,13 @@
-import React from "react";
-import { Ticket, Award, CheckCircle2, ArrowRight, Loader2 } from "lucide-react";
+"use client";
+
+import React, { useState } from "react";
+import { Ticket, Award, CheckCircle2, ArrowRight, Loader2, ShoppingBag, ArrowLeft, AlertCircle } from "lucide-react";
+import { Link } from "@/lib/i18n/navigation";
 import { TijarahButton } from "@/components/atom/tijarahButton";
 import { TijarahBadge } from "@/components/atom/tijarahBadge";
 import { TijarahSelect } from "@/components/atom/tijarahSelect";
 import { formatCurrency } from "@/utils/formatters";
+import { getVoucherViolationReason } from "@/utils/voucherEligibility";
 import { VoucherItem } from "../../types/shop.types";
 
 export interface OrderSummaryCardProps {
@@ -22,6 +26,9 @@ export interface OrderSummaryCardProps {
   vouchers?: VoucherItem[];
   onSelectVoucher?: (voucher: VoucherItem | null) => void;
   isLoadingVouchers?: boolean;
+  shippingType?: string;
+  paymentMethod?: string;
+  onOpenItemsSheet?: () => void;
 }
 
 export const OrderSummaryCard: React.FC<OrderSummaryCardProps> = ({
@@ -40,14 +47,39 @@ export const OrderSummaryCard: React.FC<OrderSummaryCardProps> = ({
   vouchers = [],
   onSelectVoucher,
   isLoadingVouchers = false,
+  shippingType,
+  paymentMethod,
+  onOpenItemsSheet,
 }) => {
+  const [agreeNoCancelReturn, setAgreeNoCancelReturn] = useState(false);
   const hasDropdown = typeof onSelectVoucher === "function";
 
   return (
     <div className="flex flex-col gap-4 p-5 rounded-2xl border border-border-subtle bg-surface mac-shadow lg:sticky lg:top-6">
-      <h3 className="text-base font-extrabold text-text-primary border-b border-border-subtle pb-3">
-        Ringkasan Pembayaran
-      </h3>
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border-subtle pb-3">
+        <h3 className="text-base font-extrabold text-text-primary">
+          Ringkasan Pembayaran
+        </h3>
+        <div className="flex items-center gap-2">
+          {onOpenItemsSheet && (
+            <button
+              type="button"
+              onClick={onOpenItemsSheet}
+              className="inline-flex items-center gap-1 text-[11px] font-bold text-primary-sage hover:underline cursor-pointer"
+            >
+              <ShoppingBag className="w-3.5 h-3.5" />
+              <span>Ubah Qty (+/-)</span>
+            </button>
+          )}
+          <Link
+            href="/shop"
+            className="inline-flex items-center gap-1 text-[11px] font-bold text-text-muted hover:text-primary-sage"
+          >
+            <ArrowLeft className="w-3.5 h-3.5" />
+            <span>Tambah Produk</span>
+          </Link>
+        </div>
+      </div>
 
       {/* Voucher Selector: TijarahSelect (Preferred) or Fallback Modal Trigger */}
       {hasDropdown ? (
@@ -111,8 +143,13 @@ export const OrderSummaryCard: React.FC<OrderSummaryCardProps> = ({
               </div>
             </TijarahSelect.Item>
             {vouchers.map((v) => {
-              const meetsMin = subtotal >= v.minPurchase;
-              const minText = `Min. Rp ${formatCurrency(v.minPurchase)}`;
+              const violationReason = getVoucherViolationReason(v as any, {
+                subtotal,
+                shippingType,
+                paymentMethod,
+              });
+              const isEligible = !violationReason;
+              const minText = `Min. ${formatCurrency(v.minPurchase)}`;
               const discountDesc =
                 v.discountType === "FIXED"
                   ? `Potongan ${formatCurrency(v.discountValue)}`
@@ -125,9 +162,9 @@ export const OrderSummaryCard: React.FC<OrderSummaryCardProps> = ({
                   id={v.code}
                   key={v.code}
                   textValue={`${v.code} - ${discountDesc}`}
-                  isDisabled={!meetsMin}
+                  isDisabled={!isEligible}
                 >
-                  <div className="flex flex-col gap-0.5 py-1 w-full text-left">
+                  <div className={`flex flex-col gap-0.5 py-1 w-full text-left ${!isEligible ? "opacity-60" : ""}`}>
                     <div className="flex items-center justify-between gap-2">
                       <span className="font-mono text-xs font-bold text-primary-sage">
                         {v.code}
@@ -137,15 +174,15 @@ export const OrderSummaryCard: React.FC<OrderSummaryCardProps> = ({
                       </span>
                     </div>
                     <div className="flex items-center justify-between text-[10px] text-text-muted gap-2">
-                      <span className="truncate max-w-[200px]">{v.title}</span>
+                      <span className="truncate max-w-[180px]">{v.title}</span>
                       <span
                         className={
-                          meetsMin
+                          isEligible
                             ? "text-text-muted shrink-0"
                             : "text-status-danger font-semibold shrink-0"
                         }
                       >
-                        {minText} {meetsMin ? "" : "• Belum memenuhi"}
+                        {isEligible ? minText : violationReason}
                       </span>
                     </div>
                   </div>
@@ -262,12 +299,24 @@ export const OrderSummaryCard: React.FC<OrderSummaryCardProps> = ({
           </span>
         </div>
 
+        <label className="flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 p-2.5 text-[11px] text-text-primary cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={agreeNoCancelReturn}
+            onChange={(e) => setAgreeNoCancelReturn(e.target.checked)}
+            className="mt-0.5 accent-primary-sage shrink-0"
+          />
+          <span className="leading-relaxed">
+            Saya memahami bahwa pesanan yang sudah dibuat <strong>tidak dapat dibatalkan maupun diretur</strong> (kebijakan transaksi final sementara).
+          </span>
+        </label>
+
         <TijarahButton
           id="checkout-submit-btn"
           type="button"
           onClick={onExecuteCheckout}
           isLoading={isSubmitting}
-          isDisabled={isDisabled || subtotal <= 0}
+          isDisabled={isDisabled || subtotal <= 0 || !agreeNoCancelReturn}
           tijarahVariant="primary"
           className="w-full font-bold py-3 text-sm shadow-md flex items-center justify-center gap-2"
         >

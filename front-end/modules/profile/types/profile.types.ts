@@ -280,6 +280,7 @@ export type ProfileTabType =
   | "kasbon"
   | "addresses"
   | "orders"
+  | "returns"
   | "vouchers"
   | "notifications"
   | "settings";

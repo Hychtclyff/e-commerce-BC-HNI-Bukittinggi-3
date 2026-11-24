@@ -1,7 +1,12 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import type { StoreTabType, StoreOrder } from "./types/store.types";
+import { useAuthStore } from "@/modules/auth/services/auth.store";
+import { hasErpAccess } from "@/lib/auth/erpAccess";
+import { ShieldAlert, ArrowLeft } from "lucide-react";
+import { Link } from "@/lib/i18n/navigation";
+import { TijarahButton } from "@/components/atom/tijarahButton";
 import { useStoreErp } from "./hooks/useStoreErp";
 import { StoreHeader } from "./components/organism/StoreHeader";
 import { StoreSidebarNav } from "./components/organism/StoreSidebarNav";
@@ -23,12 +28,77 @@ import { ProductKnowledgePanel } from "./components/organism/panels/ProductKnowl
 import { NewsPanel } from "@/modules/news/components/NewsPanel";
 import { ContactsPanel } from "./components/organism/panels/ContactsPanel";
 import { MediaLibraryPanel } from "./components/organism/panels/MediaLibraryPanel";
+import { PurchasingPanel } from "./components/organism/panels/PurchasingPanel";
+import { ReturnsPanel } from "./components/organism/panels/ReturnsPanel";
+import { AuditLogsPanel } from "./components/organism/panels/AuditLogsPanel";
+import { StoreSettingsPanel } from "./components/organism/panels/StoreSettingsPanel";
+import { CashierShiftBanner } from "./components/molecules/CashierShiftBanner";
 import { RejectOrderModal } from "./components/organism/modals/RejectOrderModal";
 import { ShipOrderModal } from "./components/organism/modals/ShipOrderModal";
 import { ReceiptPrintModal } from "./components/organism/modals/ReceiptPrintModal";
 
 export function StoreDashboard() {
-  const [activeTab, setActiveTab] = useState<StoreTabType>("overview");
+  const user = useAuthStore((state) => state.user);
+
+  if (!hasErpAccess(user)) {
+    return (
+      <div className="min-h-[70vh] flex items-center justify-center px-4">
+        <div className="max-w-md w-full rounded-2xl border border-border-subtle bg-surface p-6 text-center space-y-4">
+          <div className="w-12 h-12 rounded-xl bg-status-danger/10 text-status-danger flex items-center justify-center mx-auto">
+            <ShieldAlert className="w-6 h-6" />
+          </div>
+          <div className="space-y-1">
+            <h2 className="text-lg font-bold text-text-primary">
+              Akses ERP Ditolak (403)
+            </h2>
+            <p className="text-xs text-text-muted leading-relaxed">
+              Halaman ini hanya dapat diakses oleh akun dengan role Owner, Admin, Manager, Kasir, atau Staf Toko. Akun pelanggan/agen umum tidak memiliki izin akses ERP.
+            </p>
+          </div>
+          <div className="pt-2 flex justify-center">
+            <Link href="/">
+              <TijarahButton
+                type="button"
+                tijarahVariant="primary"
+                size="sm"
+                className="text-xs font-bold px-4 flex items-center gap-1.5"
+              >
+                <ArrowLeft className="w-3.5 h-3.5" />
+                <span>Kembali ke Beranda</span>
+              </TijarahButton>
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return <StoreDashboardContent />;
+}
+
+function StoreDashboardContent() {
+  const [activeTab, setActiveTabState] = useState<StoreTabType>("overview");
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const urlTab = params.get("tab") as StoreTabType | null;
+    const savedTab = sessionStorage.getItem("tijarah_erp_active_tab") as StoreTabType | null;
+    const initialTab = urlTab || savedTab;
+    if (initialTab) {
+      setActiveTabState(initialTab);
+    }
+  }, []);
+
+  const setActiveTab = useCallback((nextTab: StoreTabType) => {
+    setActiveTabState(nextTab);
+    if (typeof window !== "undefined") {
+      sessionStorage.setItem("tijarah_erp_active_tab", nextTab);
+      const url = new URL(window.location.href);
+      url.searchParams.set("tab", nextTab);
+      window.history.replaceState({}, "", url.toString());
+    }
+  }, []);
 
   // State untuk Modal Aksi Pesanan
   const [selectedOrderForShip, setSelectedOrderForShip] =
@@ -59,6 +129,8 @@ export function StoreDashboard() {
     isAdvancingOrder,
     rejectOrder,
     isRejectingOrder,
+    confirmOrderRefund,
+    triggerPrintOrder,
     verifyPickupOrder,
     isVerifyingPickup,
     createPosOrder,
@@ -242,7 +314,7 @@ export function StoreDashboard() {
               onOpenRejectModal={(ord) => setSelectedOrderForReject(ord)}
               onOpenReceiptModal={(ord) => setSelectedOrderForReceipt(ord)}
               onConfirmReceived={(id) => confirmReceived(id)}
-              onCompleteOrder={(id) => completeOrder(id)}
+              onCompleteOrder={(id, cashReceived) => completeOrder({ orderId: id, cashReceived })}
               isAdvancing={isAdvancingOrder}
             />
           )}
@@ -298,8 +370,9 @@ export function StoreDashboard() {
               onOpenRejectModal={(ord) => setSelectedOrderForReject(ord)}
               onOpenReceiptModal={(ord) => setSelectedOrderForReceipt(ord)}
               onConfirmReceived={(id) => confirmReceived(id)}
-              onCompleteOrder={(id) => completeOrder(id)}
+              onCompleteOrder={(id, cashReceived) => completeOrder({ orderId: id, cashReceived })}
               onReadyForPickup={(id) => readyForPickup(id)}
+              onConfirmRefund={(id, payload) => confirmOrderRefund({ orderId: id, ...payload })}
               onNavigateToCashier={() => setActiveTab("cashier")}
               onNavigateToEsignature={() => setActiveTab("esignature")}
               esignatures={esignatures}
@@ -446,6 +519,15 @@ export function StoreDashboard() {
 
           {/* TAB 20: MANAJEMEN MEDIA GAMBAR & DOKUMEN PDF (SUPABASE STORAGE) */}
           {activeTab === "media" && <MediaLibraryPanel />}
+
+          {/* TAB 22: MANAJEMEN RETUR & KOMPLAIN */}
+          {activeTab === "returns" && <ReturnsPanel />}
+
+          {/* TAB 23: AUDIT TRAIL */}
+          {activeTab === "auditLogs" && <AuditLogsPanel />}
+
+          {/* TAB 24: PENGATURAN TOKO TERPUSAT */}
+          {activeTab === "settings" && <StoreSettingsPanel />}
         </main>
       </div>
 
@@ -470,6 +552,9 @@ export function StoreDashboard() {
         isOpen={!!selectedOrderForReceipt}
         onClose={() => setSelectedOrderForReceipt(null)}
         order={selectedOrderForReceipt}
+        onPrinted={(orderId) => {
+          triggerPrintOrder(orderId).catch(() => {});
+        }}
       />
     </div>
   );

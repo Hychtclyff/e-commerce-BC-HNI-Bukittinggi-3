@@ -66,6 +66,11 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   return {
     title: `${product.name} | TIJARAH-3`,
     description: product.description || `Beli ${product.name} dengan harga terjangkau di TIJARAH-3.`,
+    openGraph: {
+      title: `${product.name} | TIJARAH-3`,
+      description: product.description || `Produk halal & herba HNI resmi di BC HNI Bukittinggi 3.`,
+      images: product.imageUrl ? [product.imageUrl] : [],
+    },
   };
 }
 

@@ -15,7 +15,10 @@ export const checkoutApi = {
   async calculateCheckout(
     payload: CalculateCheckoutPayload
   ): Promise<CalculateCheckoutResult> {
-    const res = await apiClient.post("/checkout/calculate", payload);
+    const res = await apiClient.post("/checkout/calculate", payload, {
+      skipAuthRedirect: true,
+      skipGlobalToast: true,
+    } as any);
     return res.data?.data ?? res.data;
   },
 
@@ -26,7 +29,9 @@ export const checkoutApi = {
   async processCheckout(
     payload: ProcessCheckoutPayload
   ): Promise<CheckoutProcessResponse> {
-    const res = await apiClient.post("/checkout/process", payload);
+    const res = await apiClient.post("/checkout/process", payload, {
+      skipGlobalToast: true,
+    } as any);
     return res.data?.data ?? res.data;
   },
 

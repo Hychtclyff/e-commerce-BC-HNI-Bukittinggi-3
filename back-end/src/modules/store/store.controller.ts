@@ -152,7 +152,8 @@ export const storeController = {
     try {
       const lang = getLanguageFromRequest(req);
       const actor = await extractActorFromRequest(req);
-      const data = await storeService.completeOrder(req.params.id, actor, lang);
+      const body = (req.body || {}) as { cashReceived?: number };
+      const data = await storeService.completeOrder(req.params.id, actor, lang, body.cashReceived);
       return responseUtil.success({ reply, message: 'Pesanan berhasil diselesaikan', data });
     } catch (error: any) {
       if (error instanceof AppError) return responseUtil.appError(reply, error);
@@ -172,12 +173,42 @@ export const storeController = {
     }
   },
 
-  async rejectOrder(req: FastifyRequest<{ Params: { id: string }; Body: { reason: string } }>, reply: FastifyReply) {
+  async rejectOrder(req: FastifyRequest<{ Params: { id: string }; Body: { reason?: string; rejectionReason?: string } }>, reply: FastifyReply) {
     try {
       const lang = getLanguageFromRequest(req);
       const actor = await extractActorFromRequest(req);
-      const data = await storeService.rejectOrder(req.params.id, req.body?.reason || 'Stok tidak mencukupi', actor, lang);
-      return responseUtil.success({ reply, message: 'Pesanan ditolak', data });
+      const reason = req.body?.rejectionReason || req.body?.reason || 'Stok tidak mencukupi';
+      const data = await storeService.rejectOrder(req.params.id, reason, actor, lang);
+      return responseUtil.success({ reply, message: data.message || 'Pesanan ditolak', data });
+    } catch (error: any) {
+      if (error instanceof AppError) return responseUtil.appError(reply, error);
+      throw error;
+    }
+  },
+
+  async confirmOrderRefund(
+    req: FastifyRequest<{ Params: { id: string }; Body: { refundProofUrl?: string; adminNotes?: string } }>,
+    reply: FastifyReply
+  ) {
+    try {
+      const lang = getLanguageFromRequest(req);
+      const actor = await extractActorFromRequest(req);
+      const data = await storeService.confirmOrderRefund(req.params.id, req.body || {}, actor, lang);
+      return responseUtil.success({ reply, message: data.message, data });
+    } catch (error: any) {
+      if (error instanceof AppError) return responseUtil.appError(reply, error);
+      throw error;
+    }
+  },
+
+  async triggerPrintOrder(
+    req: FastifyRequest<{ Params: { id: string } }>,
+    reply: FastifyReply
+  ) {
+    try {
+      const actor = await extractActorFromRequest(req);
+      const data = await storeService.triggerPrintOrder(req.params.id, actor);
+      return responseUtil.success({ reply, message: data.message, data });
     } catch (error: any) {
       if (error instanceof AppError) return responseUtil.appError(reply, error);
       throw error;
@@ -379,7 +410,13 @@ export const storeController = {
   // Agents
   async getAgents(req: FastifyRequest, reply: FastifyReply) {
     try {
-      const data = await storeService.getAgents();
+      const query = (req.query || {}) as {
+        role?: string;
+        position?: string;
+        status?: string;
+        search?: string;
+      };
+      const data = await storeService.getAgents(query);
       return responseUtil.success({ reply, message: 'Berhasil memuat daftar staf & agen', data });
     } catch (error: any) {
       if (error instanceof AppError) return responseUtil.appError(reply, error);

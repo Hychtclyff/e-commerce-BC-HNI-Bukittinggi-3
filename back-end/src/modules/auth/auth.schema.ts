@@ -70,3 +70,24 @@ export const exchangeCodeSchema = validateSchema({
   body: exchangeCodeBodySchema,
 });
 
+export const forgotPasswordSchema = validateSchema({
+  body: z.object({
+    email: z.string().email(),
+  }),
+});
+
+export const resetPasswordSchema = validateSchema({
+  body: z.object({
+    token: z.string().min(10),
+    newPassword: z.string().min(6),
+  }),
+});
+
+export const changePasswordSchema = validateSchema({
+  body: z.object({
+    currentPassword: z.string().min(1),
+    newPassword: z.string().min(6),
+  }),
+});
+
+

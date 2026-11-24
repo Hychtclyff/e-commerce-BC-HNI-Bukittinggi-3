@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import Image from "next/image";
 import { Link, useRouter } from "@/lib/i18n/navigation";
 import {
@@ -14,13 +14,17 @@ import {
   Check,
   Star,
   Trash2,
+  Heart,
+  BadgeCheck,
 } from "lucide-react";
 import { ShopProduct } from "@/modules/shop/types/shop.types";
+import { shopApi } from "@/modules/shop/api/shop.api";
 import { useCartStore } from "@/modules/shop/store/cart.store";
 import { useAuthStore } from "@/modules/auth/services/auth.store";
 import { formatCurrency } from "@/utils/formatters";
 import { TijarahButton } from "@/components/atom/tijarahButton";
 import { TijarahBadge } from "@/components/atom/tijarahBadge";
+import { showToast } from "@/utils/toast";
 
 interface IProductDetailClientProps {
   product: ShopProduct;
@@ -44,6 +48,90 @@ export default function ProductDetailClient({ product }: IProductDetailClientPro
 
   const [quantity, setQuantity] = useState<number>(1);
   const [justAdded, setJustAdded] = useState<boolean>(false);
+
+  // Wishlist, Reviews, and Related Products state
+  const [wishlisted, setWishlisted] = useState(false);
+  const [togglingWishlist, setTogglingWishlist] = useState(false);
+  const [reviewsData, setReviewsData] = useState<{
+    averageRating: number;
+    totalReviews: number;
+    reviews: any[];
+  }>({ averageRating: 0, totalReviews: 0, reviews: [] });
+  const [relatedProducts, setRelatedProducts] = useState<any[]>([]);
+  const [reviewRating, setReviewRating] = useState(5);
+  const [reviewComment, setReviewComment] = useState("");
+  const [submittingReview, setSubmittingReview] = useState(false);
+
+  const loadEngagement = useCallback(async () => {
+    try {
+      const [rev, rel] = await Promise.all([
+        shopApi.getProductReviews(product.id),
+        shopApi.getRelatedProducts(product.id),
+      ]);
+      setReviewsData(rev);
+      setRelatedProducts(Array.isArray(rel) ? rel : []);
+    } catch {
+      // Ignore silent fetch errors
+    }
+
+    if (user?.id) {
+      try {
+        const wList = await shopApi.getWishlist();
+        if (Array.isArray(wList)) {
+          setWishlisted(wList.some((w: any) => w.id === product.id));
+        }
+      } catch {
+        // Ignore
+      }
+    }
+  }, [product.id, user?.id]);
+
+  useEffect(() => {
+    loadEngagement();
+  }, [loadEngagement]);
+
+  const handleToggleWishlist = async () => {
+    if (!user?.id) {
+      showToast.error("Login Diperlukan", "Silakan masuk untuk menyimpan produk ke wishlist.");
+      router.push("/login");
+      return;
+    }
+    setTogglingWishlist(true);
+    try {
+      const res = await shopApi.toggleWishlist(product.id);
+      setWishlisted(Boolean(res.wishlisted));
+      showToast.success(
+        res.wishlisted ? "Disimpan ke Wishlist" : "Dihapus dari Wishlist",
+        product.name
+      );
+    } catch (err: any) {
+      showToast.error("Gagal", err?.message || "Tidak dapat memperbarui wishlist.");
+    } finally {
+      setTogglingWishlist(false);
+    }
+  };
+
+  const handleSubmitReview = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user?.id) {
+      showToast.error("Login Diperlukan", "Silakan masuk untuk menulis ulasan.");
+      return;
+    }
+    setSubmittingReview(true);
+    try {
+      await shopApi.createProductReview(product.id, {
+        rating: reviewRating,
+        comment: reviewComment,
+      });
+      setReviewComment("");
+      showToast.success("Ulasan Terkirim", "Terima kasih atas penilaian Anda.");
+      await loadEngagement();
+    } catch (err: any) {
+      showToast.error("Gagal Mengirim Ulasan", err?.message || "Terjadi kesalahan.");
+    } finally {
+      setSubmittingReview(false);
+    }
+  };
 
   const activePrice = effectiveIsAgent ? product.agentPrice : product.normalPrice;
   const isOutOfStock = product.stock <= 0;
@@ -309,10 +397,165 @@ export default function ProductDetailClient({ product }: IProductDetailClientPro
               >
                 <span>Beli Sekarang</span>
               </TijarahButton>
+
+              <TijarahButton
+                type="button"
+                onClick={handleToggleWishlist}
+                isDisabled={togglingWishlist}
+                tijarahVariant="outline"
+                isIconOnly
+                aria-label="Simpan ke Wishlist"
+                className={`!w-12 !h-12 shrink-0 rounded-xl flex items-center justify-center border transition-colors ${
+                  wishlisted
+                    ? "!border-rose-500 !bg-rose-500/10 !text-rose-600"
+                    : "!border-border-subtle !text-text-muted hover:!text-rose-500"
+                }`}
+              >
+                <Heart className={`w-5 h-5 ${wishlisted ? "fill-rose-500 text-rose-500" : ""}`} />
+              </TijarahButton>
             </div>
           </div>
         </div>
       </div>
+
+      {/* Ulasan & Rating Pembeli */}
+      <section className="mt-12 pt-10 border-t border-border-subtle space-y-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <h2 className="text-xl font-bold text-text-primary">Ulasan & Rating Pembeli</h2>
+            <p className="text-xs text-text-muted mt-0.5">
+              {reviewsData.totalReviews > 0
+                ? `Rata-rata ${reviewsData.averageRating} / 5 dari ${reviewsData.totalReviews} ulasan`
+                : "Belum ada ulasan untuk produk ini. Jadilah yang pertama memberi ulasan."}
+            </p>
+          </div>
+          {reviewsData.totalReviews > 0 && (
+            <div className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-amber-500/10 border border-amber-500/20">
+              <Star className="w-4 h-4 fill-amber-500 text-amber-500" />
+              <span className="text-sm font-bold text-text-primary">{Number(reviewsData.averageRating || 0).toFixed(1)}</span>
+              <span className="text-xs text-text-muted">/ 5.0</span>
+            </div>
+          )}
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          {/* Form Ulasan */}
+          <form
+            onSubmit={handleSubmitReview}
+            className="lg:col-span-4 rounded-2xl border border-border-subtle bg-surface p-5 space-y-4 h-fit"
+          >
+            <h3 className="text-sm font-bold text-text-primary">Tulis Ulasan Anda</h3>
+            <div className="flex items-center gap-1.5">
+              {[1, 2, 3, 4, 5].map((star) => (
+                <button
+                  key={star}
+                  type="button"
+                  onClick={() => setReviewRating(star)}
+                  className="p-1 cursor-pointer transition-transform hover:scale-110"
+                  aria-label={`Beri ${star} bintang`}
+                >
+                  <Star
+                    className={`w-5 h-5 ${
+                      star <= reviewRating ? "fill-amber-500 text-amber-500" : "text-border-subtle"
+                    }`}
+                  />
+                </button>
+              ))}
+            </div>
+            <textarea
+              rows={3}
+              value={reviewComment}
+              onChange={(e) => setReviewComment(e.target.value)}
+              placeholder="Bagikan pengalaman Anda menggunakan produk ini..."
+              className="w-full rounded-xl border border-border-subtle bg-canvas px-3.5 py-2.5 text-xs text-text-primary placeholder:text-text-muted/60 focus:border-primary-sage focus:outline-none"
+            />
+            <TijarahButton
+              type="submit"
+              tijarahVariant="primary"
+              isLoading={submittingReview}
+              className="w-full py-2.5 text-xs font-bold rounded-xl"
+            >
+              Kirim Ulasan
+            </TijarahButton>
+          </form>
+
+          {/* Daftar Ulasan */}
+          <div className="lg:col-span-8 space-y-3">
+            {reviewsData.reviews.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-border-subtle bg-canvas/50 p-8 text-center text-xs text-text-muted">
+                Belum ada ulasan pembeli.
+              </div>
+            ) : (
+              reviewsData.reviews.map((rev: any) => (
+                <div
+                  key={rev.id}
+                  className="rounded-2xl border border-border-subtle bg-surface p-4 space-y-2"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold text-text-primary">{rev.userName}</span>
+                      {rev.isVerifiedPurchase && (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 text-[10px] font-semibold">
+                          <BadgeCheck className="w-3 h-3" /> Pembeli Terverifikasi
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-0.5">
+                      {Array.from({ length: 5 }).map((_, i) => (
+                        <Star
+                          key={i}
+                          className={`w-3.5 h-3.5 ${
+                            i < Number(rev.rating) ? "fill-amber-500 text-amber-500" : "text-border-subtle"
+                          }`}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                  {rev.comment && (
+                    <p className="text-xs text-text-muted leading-relaxed">{rev.comment}</p>
+                  )}
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      </section>
+
+      {/* Produk Terkait */}
+      {relatedProducts.length > 0 && (
+        <section className="mt-12 pt-10 border-t border-border-subtle space-y-5">
+          <h2 className="text-xl font-bold text-text-primary">Produk Terkait Lainnya</h2>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
+            {relatedProducts.map((rel: any) => (
+              <Link
+                key={rel.id}
+                href={`/products/${rel.id}`}
+                className="group rounded-2xl border border-border-subtle bg-surface p-3 hover:border-primary-sage transition-all flex flex-col gap-2"
+              >
+                <div className="aspect-square rounded-xl bg-canvas overflow-hidden flex items-center justify-center">
+                  {rel.imageUrl ? (
+                    <img
+                      src={rel.imageUrl}
+                      alt={rel.name}
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                    />
+                  ) : (
+                    <ShoppingBag className="w-6 h-6 text-text-muted/40" />
+                  )}
+                </div>
+                <div className="space-y-1">
+                  <p className="text-xs font-semibold text-text-primary line-clamp-2 group-hover:text-primary-sage">
+                    {rel.name}
+                  </p>
+                  <p className="text-xs font-bold text-primary-sage font-mono">
+                    {formatCurrency(Number(effectiveIsAgent && rel.allowAgentPrice !== false ? rel.agentPrice : (rel.normalPrice ?? rel.regularPrice ?? 0)))}
+                  </p>
+                </div>
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
     </div>
   );
 }

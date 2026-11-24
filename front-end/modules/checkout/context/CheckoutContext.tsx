@@ -306,6 +306,43 @@ export const CheckoutProvider: React.FC<{ children: React.ReactNode }> = ({
           });
         }
       } catch (err: any) {
+        const status = err?.response?.status ?? err?.statusCode;
+        // Jika kalkulasi server gagal akibat produk di localStorage sudah tidak ada / ID berubah pasca reset DB
+        if (status === 404 && /product|produk/i.test(err?.message || "")) {
+          try {
+            const liveProducts = await shopApi.getProducts();
+            if (Array.isArray(liveProducts) && liveProducts.length > 0 && isMounted) {
+              const byId = new Map(liveProducts.map((p) => [p.id, p]));
+              const bySku = new Map(liveProducts.map((p) => [String(p.sku || "").toLowerCase(), p]));
+              const byName = new Map(liveProducts.map((p) => [String(p.name || "").toLowerCase(), p]));
+
+              let changed = false;
+              const reconciled = cartItems
+                .map((ci) => {
+                  if (byId.has(ci.product.id)) return ci;
+                  const matched =
+                    (ci.product.sku && bySku.get(String(ci.product.sku).toLowerCase())) ||
+                    (ci.product.name && byName.get(String(ci.product.name).toLowerCase()));
+                  if (matched) {
+                    changed = true;
+                    return { ...ci, product: matched };
+                  }
+                  changed = true;
+                  return null;
+                })
+                .filter(Boolean) as typeof cartItems;
+
+              if (changed) {
+                localStorage.setItem("hni_tijarah_cart", JSON.stringify(reconciled));
+                window.location.reload();
+                return;
+              }
+            }
+          } catch {
+            // ignore sync failure
+          }
+        }
+
         // Jika kalkulasi server gagal akibat voucher invalid/expired, reset voucher & beri peringatan
         if (selectedVoucher && /voucher/i.test(err?.message || "")) {
           setSelectedVoucher(null);

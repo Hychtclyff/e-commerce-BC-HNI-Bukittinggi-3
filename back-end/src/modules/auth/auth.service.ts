@@ -1,11 +1,13 @@
-import { db } from "@/prisma/db";
+import { db, pool } from "@/prisma/db";
 import { AppError } from "@/utils/AppError";
 import { typePayloadLog, typePayloadReg } from "./auth.type";
 import bcrypt from "bcrypt";
+import crypto from "crypto";
 import jwt from "jsonwebtoken";
 import { env } from "@/config/env";
 import { supabase } from "@/plugins/supabase";
 import { SupportedLanguage, t, translateSupabaseError } from "@/i18n";
+import { EmailService } from "@/services/email.service";
 
 function checkUserVerification(supabaseUser: any, _existingDbUser?: any): { isVerified: boolean; isNewUser: boolean } {
     // 1. Cek metadata is_verified dari Supabase Auth user_metadata (diset setelah verifikasi OTP 6-digit)
@@ -94,10 +96,38 @@ export const authService = {
 
     async login(payload: typePayloadLog, lang: SupportedLanguage = 'id') {
         // 1. Autentikasi melalui Supabase Auth
-        const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+        let { data: authData, error: authError } = await supabase.auth.signInWithPassword({
             email: payload.email,
             password: payload.password,
         });
+
+        // Fallback sinkronisasi jika password lokal di core_auth.users sudah diubah namun Supabase Auth tertinggal
+        if ((authError || !authData.user) && /invalid login credentials/i.test(authError?.message || '')) {
+            const localUser = await db.orm.core_auth.User.where({ email: payload.email }).first();
+            if (localUser?.passwordHash) {
+                const localMatch = await bcrypt.compare(payload.password, localUser.passwordHash);
+                if (localMatch) {
+                    const { error: syncErr } = await supabase.auth.admin.updateUserById(localUser.id, {
+                        password: payload.password,
+                    });
+                    if (syncErr) {
+                        const listRes = await supabase.auth.admin.listUsers({ page: 1, perPage: 1000 });
+                        const supaUser = listRes.data?.users?.find(
+                            (u) => u.email?.toLowerCase() === payload.email.toLowerCase()
+                        );
+                        if (supaUser) {
+                            await supabase.auth.admin.updateUserById(supaUser.id, { password: payload.password });
+                        }
+                    }
+                    const retryRes = await supabase.auth.signInWithPassword({
+                        email: payload.email,
+                        password: payload.password,
+                    });
+                    authData = retryRes.data;
+                    authError = retryRes.error;
+                }
+            }
+        }
 
         if (authError || !authData.user) {
             const rawMsg = authError?.message;
@@ -201,10 +231,38 @@ export const authService = {
 
         const { passwordHash, ...userWithoutPassword } = existingUser;
 
+        // Ambil role staf toko aktif (jika ada) untuk otorisasi modul ERP
+        let staffRole: string | null = null;
+        try {
+            const staffRes = await pool.query(
+                `SELECT role FROM store.agents
+                 WHERE (linked_user_id = $1 OR LOWER(email) = LOWER($2))
+                   AND status = 'ACTIVE'
+                   AND COALESCE(source_channel, 'TIJARAH') <> 'HSIS_SYNC'
+                 LIMIT 1`,
+                [existingUser.id, existingUser.email || '']
+            );
+            staffRole = staffRes.rows[0]?.role ? String(staffRes.rows[0].role).toUpperCase() : null;
+        } catch {
+            staffRole = null;
+        }
+
+        const refreshToken =
+            authData.session?.refresh_token ||
+            jwt.sign(
+                { userId: existingUser.id, email: existingUser.email, type: 'refresh' },
+                env.JWT_SECRET,
+                { expiresIn: '7d' }
+            );
+
         return {
-            user: userWithoutPassword,
+            user: {
+                ...userWithoutPassword,
+                staffRole,
+            },
             token: authData.session?.access_token || appToken,
             appToken,
+            refreshToken,
         };
     },
 
@@ -679,6 +737,220 @@ export const authService = {
             }
             throw new AppError(t('auth.verify_otp_failed', { message: error.message || 'Unknown error' }, lang), 500);
         }
+    },
+
+    async forgotPassword(email: string, lang: SupportedLanguage = 'id') {
+        const normalizedEmail = email.trim().toLowerCase();
+        const user = await db.orm.core_auth.User.where({ email: normalizedEmail }).first();
+
+        if (user && !user.isDeleted) {
+            const rawToken = crypto.randomBytes(32).toString('hex');
+            const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
+            const id = `PWD-${crypto.randomUUID().slice(0, 12).toUpperCase()}`;
+            const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+
+            await pool.query(
+                `INSERT INTO core_auth.password_resets (id, user_id, email, token_hash, expires_at)
+                 VALUES ($1, $2, $3, $4, $5)`,
+                [id, user.id, normalizedEmail, tokenHash, expiresAt]
+            );
+
+            const resetUrl = `${env.FRONTEND_URL.replace(/\/$/, '')}/${lang}/reset-password?token=${rawToken}`;
+            await EmailService.sendPasswordResetEmail(normalizedEmail, resetUrl, user.fullName);
+        }
+
+        return {
+            message:
+                lang === 'en'
+                    ? 'If the email is registered, a password reset link has been sent.'
+                    : 'Jika email terdaftar, tautan reset password telah dikirim ke kotak masuk Anda.',
+        };
+    },
+
+    async resetPassword(token: string, newPassword: string, lang: SupportedLanguage = 'id') {
+        const tokenHash = crypto.createHash('sha256').update(token.trim()).digest('hex');
+        const resetRes = await pool.query(
+            `SELECT id, user_id, email, expires_at, used_at
+             FROM core_auth.password_resets
+             WHERE token_hash = $1
+             ORDER BY created_at DESC
+             LIMIT 1`,
+            [tokenHash]
+        );
+
+        if (resetRes.rows.length === 0) {
+            throw new AppError(
+                lang === 'en' ? 'Invalid or expired reset token.' : 'Token reset password tidak valid atau sudah kedaluwarsa.',
+                400
+            );
+        }
+
+        const record = resetRes.rows[0];
+        if (record.used_at || new Date(record.expires_at).getTime() < Date.now()) {
+            throw new AppError(
+                lang === 'en' ? 'Reset token has expired or already been used.' : 'Token reset password sudah digunakan atau kedaluwarsa.',
+                400
+            );
+        }
+
+        const passwordHash = await bcrypt.hash(newPassword, 10);
+        await pool.query(
+            `UPDATE core_auth.users SET "passwordHash" = $1, "updatedAt" = NOW() WHERE id = $2`,
+            [passwordHash, record.user_id]
+        );
+        await pool.query(
+            `UPDATE core_auth.password_resets SET used_at = NOW() WHERE id = $1`,
+            [record.id]
+        );
+
+        const { error: resetSupaErr } = await supabase.auth.admin.updateUserById(record.user_id, { password: newPassword });
+        if (resetSupaErr) {
+            const listRes = await supabase.auth.admin.listUsers({ page: 1, perPage: 1000 });
+            const matched = listRes.data?.users?.find(
+                (u) => u.email?.toLowerCase() === String(record.email || '').toLowerCase()
+            );
+            if (matched) {
+                await supabase.auth.admin.updateUserById(matched.id, { password: newPassword });
+            }
+        }
+
+        return {
+            message: lang === 'en' ? 'Password has been reset successfully.' : 'Password berhasil diperbarui. Silakan login kembali.',
+        };
+    },
+
+    async changePassword(userId: string, currentPassword: string, newPassword: string, lang: SupportedLanguage = 'id') {
+        const userRes = await pool.query(
+            `SELECT id, email, "passwordHash" FROM core_auth.users WHERE id = $1 LIMIT 1`,
+            [userId]
+        );
+        if (userRes.rows.length === 0) {
+            throw new AppError(t('profile.user_not_found', {}, lang), 404);
+        }
+
+        const user = userRes.rows[0];
+        if (user.passwordHash) {
+            const isValid = await bcrypt.compare(currentPassword, user.passwordHash);
+            if (!isValid) {
+                throw new AppError(
+                    lang === 'en' ? 'Current password is incorrect.' : 'Password saat ini tidak sesuai.',
+                    400
+                );
+            }
+        }
+
+        const passwordHash = await bcrypt.hash(newPassword, 10);
+        await pool.query(
+            `UPDATE core_auth.users SET "passwordHash" = $1, "updatedAt" = NOW() WHERE id = $2`,
+            [passwordHash, userId]
+        );
+
+        const { error: adminErr } = await supabase.auth.admin.updateUserById(userId, { password: newPassword });
+        if (adminErr) {
+            const listRes = await supabase.auth.admin.listUsers({ page: 1, perPage: 1000 });
+            const matched = listRes.data?.users?.find(
+                (u) => u.email?.toLowerCase() === String(user.email || '').toLowerCase()
+            );
+            if (matched) {
+                const { error: retryErr } = await supabase.auth.admin.updateUserById(matched.id, { password: newPassword });
+                if (retryErr) {
+                    throw new AppError(
+                        lang === 'en' ? 'Failed to sync password with auth provider.' : 'Gagal menyinkronkan password ke layanan autentikasi.',
+                        500
+                    );
+                }
+            }
+        }
+
+        return {
+            message: lang === 'en' ? 'Password updated successfully.' : 'Password berhasil diubah.',
+        };
+    },
+
+    async refreshSession(refreshToken: string, lang: SupportedLanguage = 'id') {
+        if (!refreshToken || !refreshToken.trim()) {
+            throw new AppError(
+                lang === 'en' ? 'Refresh token is required.' : 'Sesi berakhir. Silakan login kembali.',
+                401
+            );
+        }
+
+        const tokenStr = refreshToken.trim();
+
+        // 1. Coba verifikasi sebagai internal refresh JWT
+        try {
+            const decoded = jwt.verify(tokenStr, env.JWT_SECRET) as {
+                userId?: string;
+                email?: string;
+                type?: string;
+            };
+            if (decoded?.userId) {
+                const userRes = await pool.query(
+                    `SELECT id, email, "fullName", "phoneNumber", "userType", "isActive", "isDeleted"
+                     FROM core_auth.users WHERE id = $1 LIMIT 1`,
+                    [decoded.userId]
+                );
+                if (userRes.rows.length > 0 && !userRes.rows[0].isDeleted && userRes.rows[0].isActive !== false) {
+                    const user = userRes.rows[0];
+                    const appToken = jwt.sign(
+                        { userId: user.id, email: user.email, phoneNumber: user.phoneNumber },
+                        env.JWT_SECRET,
+                        { expiresIn: (env.JWT_EXPIRES_IN || '1d') as jwt.SignOptions['expiresIn'] }
+                    );
+                    const nextRefreshToken = jwt.sign(
+                        { userId: user.id, email: user.email, type: 'refresh' },
+                        env.JWT_SECRET,
+                        { expiresIn: '7d' }
+                    );
+                    return {
+                        user,
+                        token: appToken,
+                        appToken,
+                        refreshToken: nextRefreshToken,
+                    };
+                }
+            }
+        } catch {
+            // Lanjut ke Supabase refreshSession
+        }
+
+        // 2. Fallback: Refresh via Supabase Auth
+        const { data, error } = await supabase.auth.refreshSession({ refresh_token: tokenStr });
+        if (error || !data?.session || !data?.user) {
+            throw new AppError(
+                lang === 'en' ? 'Session expired. Please sign in again.' : 'Sesi Anda telah berakhir. Silakan login kembali.',
+                401
+            );
+        }
+
+        const supaUser = data.user;
+        const dbRes = await pool.query(
+            `SELECT id, email, "fullName", "phoneNumber", "userType", "isActive", "isDeleted"
+             FROM core_auth.users
+             WHERE id = $1 OR ($2::text IS NOT NULL AND LOWER(email) = LOWER($2))
+             LIMIT 1`,
+            [supaUser.id, supaUser.email || null]
+        );
+        const dbUser = dbRes.rows[0];
+        if (!dbUser || dbUser.isDeleted || dbUser.isActive === false) {
+            throw new AppError(
+                lang === 'en' ? 'Account is inactive or not found.' : 'Akun tidak aktif atau tidak ditemukan.',
+                401
+            );
+        }
+
+        const appToken = jwt.sign(
+            { userId: dbUser.id, email: dbUser.email, phoneNumber: dbUser.phoneNumber },
+            env.JWT_SECRET,
+            { expiresIn: (env.JWT_EXPIRES_IN || '1d') as jwt.SignOptions['expiresIn'] }
+        );
+
+        return {
+            user: dbUser,
+            token: data.session.access_token,
+            appToken,
+            refreshToken: data.session.refresh_token,
+        };
     },
 }
 

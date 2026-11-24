@@ -368,52 +368,22 @@ export const storeApi = {
     };
   },
 
-  async completeOrder(orderId: string): Promise<IStoreMutationResult> {
-    try {
-      const res = await apiClient.post(`/store/orders/${orderId}/complete`, {});
-      return {
-        success: true,
-        message: res.data?.message || "Pesanan selesai. Poin TP siap disinkronkan ke HSIS.",
-      };
-    } catch {
-      const orders = readCache<StoreOrder[]>("orders", []);
-      writeCache(
-        "orders",
-        orders.map((o) =>
-          o.id === orderId
-            ? {
-              ...o,
-              status: "COMPLETED" as const,
-              paymentStatus: o.paymentStatus === "UNPAID" ? ("PAID" as const) : o.paymentStatus,
-            }
-            : o
-        )
-      );
-      return {
-        success: true,
-        message: "Pesanan selesai dan diserahkan ke pelanggan.",
-      };
-    }
+  async completeOrder(orderId: string, cashReceived?: number): Promise<IStoreMutationResult> {
+    const res = await apiClient.post(`/store/orders/${orderId}/complete`, {
+      ...(cashReceived !== undefined ? { cashReceived } : {}),
+    });
+    return {
+      success: true,
+      message: res.data?.message || "Pesanan selesai. Poin TP siap disinkronkan ke HSIS.",
+    };
   },
 
   async setReadyForPickup(orderId: string): Promise<IStoreMutationResult> {
-    try {
-      const res = await apiClient.post(`/store/orders/${orderId}/ready-for-pickup`, {});
-      return {
-        success: true,
-        message: res.data?.message || "Pesanan siap diambil oleh pembeli di meja kasir.",
-      };
-    } catch {
-      const orders = readCache<StoreOrder[]>("orders", []);
-      writeCache(
-        "orders",
-        orders.map((o) => (o.id === orderId ? { ...o, status: "READY_FOR_PICKUP" as const } : o))
-      );
-      return {
-        success: true,
-        message: "Pesanan ditandai siap diambil di meja kasir.",
-      };
-    }
+    const res = await apiClient.post(`/store/orders/${orderId}/ready-for-pickup`, {});
+    return {
+      success: true,
+      message: res.data?.message || "Pesanan siap diambil oleh pembeli di meja kasir.",
+    };
   },
 
   async verifyPickupOrder(orderId: string, notes?: string): Promise<IStoreMutationResult> {
@@ -640,6 +610,25 @@ export const storeApi = {
     return {
       success: true,
       message: res.data?.message || "Pesanan telah ditolak.",
+    };
+  },
+
+  async confirmOrderRefund(
+    orderId: string,
+    payload?: { refundProofUrl?: string; adminNotes?: string }
+  ): Promise<IStoreMutationResult> {
+    const res = await apiClient.post(`/store/orders/${orderId}/confirm-refund`, payload || {});
+    return {
+      success: true,
+      message: res.data?.message || "Pengembalian dana berhasil dikonfirmasi.",
+    };
+  },
+
+  async triggerPrintOrder(orderId: string): Promise<IStoreMutationResult> {
+    const res = await apiClient.post(`/store/orders/${orderId}/print`);
+    return {
+      success: true,
+      message: res.data?.message || "Resi ditandai sudah diprint.",
     };
   },
 
@@ -947,15 +936,22 @@ export const storeApi = {
   async getSystemUsers(params?: {
     search?: string;
     userType?: string;
+    role?: string;
+    position?: string;
     isActive?: string;
     page?: number;
     limit?: number;
-  }): Promise<{ users: any[]; pagination: { page: number; limit: number; total: number; totalPages: number } }> {
+  }): Promise<{
+    users: any[];
+    facets?: { roles: string[]; positions: string[] };
+    pagination: { page: number; limit: number; total: number; totalPages: number };
+  }> {
     try {
       const res = await apiClient.get<{
         status: string;
         data: {
           users: any[];
+          facets?: { roles: string[]; positions: string[] };
           pagination: { page: number; limit: number; total: number; totalPages: number };
         };
       }>("/store/users", { params });
@@ -1544,7 +1540,10 @@ export const storeApi = {
   // ─── Metode Pengiriman (Database store.delivery_methods) ───────
   async getDeliveryMethods(): Promise<StoreDeliveryMethod[]> {
     try {
-      const res = await apiClient.get<{ status: string; data: any[] }>("/store/delivery-methods");
+      const res = await apiClient.get<{ status: string; data: any[] }>("/store/delivery-methods", {
+        skipAuthRedirect: true,
+        skipGlobalToast: true,
+      } as any);
       if (res.data?.data && Array.isArray(res.data.data) && res.data.data.length > 0) {
         const mapped: StoreDeliveryMethod[] = res.data.data.map((d) => ({
           id: String(d.id),
@@ -2031,6 +2030,141 @@ export const storeApi = {
     const res = await apiClient.post(`/store/hsis/orders/${orderId}/link-invoice`, {
       invoiceId,
     });
+    return res.data?.data ?? res.data;
+  },
+
+  // ─── Cashier Shifts ───────────────────────────────────────────
+  async getCurrentShift(): Promise<any> {
+    const res = await apiClient.get("/store/shifts/current");
+    return res.data?.data ?? null;
+  },
+
+  async getShifts(): Promise<any[]> {
+    const res = await apiClient.get("/store/shifts");
+    return res.data?.data ?? [];
+  },
+
+  async openShift(payload: { openingCash: number; deviceId?: string; notes?: string }): Promise<any> {
+    const res = await apiClient.post("/store/shifts/open", payload);
+    return res.data?.data ?? res.data;
+  },
+
+  async closeShift(shiftId: string, payload: { closingCash: number; notes?: string }): Promise<any> {
+    const res = await apiClient.post(`/store/shifts/${shiftId}/close`, payload);
+    return res.data?.data ?? res.data;
+  },
+
+  // ─── Purchasing & Suppliers ───────────────────────────────────
+  async getSuppliers(): Promise<any[]> {
+    const res = await apiClient.get("/store/suppliers");
+    return res.data?.data ?? [];
+  },
+
+  async createSupplier(payload: any): Promise<any> {
+    const res = await apiClient.post("/store/suppliers", payload);
+    return res.data?.data ?? res.data;
+  },
+
+  async deleteSupplier(id: string): Promise<any> {
+    const res = await apiClient.delete(`/store/suppliers/${id}`);
+    return res.data?.data ?? res.data;
+  },
+
+  async getPurchaseOrders(): Promise<any[]> {
+    const res = await apiClient.get("/store/purchase-orders");
+    return res.data?.data ?? [];
+  },
+
+  async createPurchaseOrder(payload: any): Promise<any> {
+    const res = await apiClient.post("/store/purchase-orders", payload);
+    return res.data?.data ?? res.data;
+  },
+
+  async receivePurchaseOrder(id: string): Promise<any> {
+    const res = await apiClient.post(`/store/purchase-orders/${id}/receive`);
+    return res.data?.data ?? res.data;
+  },
+
+  async payPurchaseOrder(id: string, amount: number): Promise<any> {
+    const res = await apiClient.post(`/store/purchase-orders/${id}/pay`, { amount });
+    return res.data?.data ?? res.data;
+  },
+
+  // ─── Order Returns ────────────────────────────────────────────
+  async getOrderReturns(): Promise<any[]> {
+    const res = await apiClient.get("/store/returns");
+    return res.data?.data ?? [];
+  },
+
+  async processOrderReturn(
+    id: string,
+    payload: { status: "APPROVED" | "REJECTED" | "REFUNDED"; adminNotes?: string; refundAmount?: number }
+  ): Promise<any> {
+    const res = await apiClient.put(`/store/returns/${id}`, payload);
+    return res.data?.data ?? res.data;
+  },
+
+  // ─── Audit Logs & Store Settings ──────────────────────────────
+  async getAuditLogs(params?: {
+    module?: string;
+    action?: string;
+    search?: string;
+  }): Promise<any[]> {
+    const res = await apiClient.get("/store/audit-logs", { params });
+    return res.data?.data ?? [];
+  },
+
+  async getProductCategories(): Promise<{ id: string; name: string; slug: string }[]> {
+    const res = await apiClient.get("/store/product-categories");
+    return res.data?.data ?? [];
+  },
+
+  async createProductCategory(name: string): Promise<{ id: string; name: string; slug: string }> {
+    const res = await apiClient.post("/store/product-categories", { name });
+    return res.data?.data;
+  },
+
+  async getProductUnits(): Promise<{ id: string; code: string; name: string }[]> {
+    const res = await apiClient.get("/store/product-units");
+    return res.data?.data ?? [];
+  },
+
+  async createProductUnit(payload: { code: string; name: string }): Promise<{ id: string; code: string; name: string }> {
+    const res = await apiClient.post("/store/product-units", payload);
+    return res.data?.data;
+  },
+
+  async getStoreSettings(): Promise<any> {
+    const res = await apiClient.get("/store/settings", {
+      skipAuthRedirect: true,
+      skipGlobalToast: true,
+    } as any);
+    return res.data?.data ?? {};
+  },
+
+  async updateStoreSettings(payload: any): Promise<any> {
+    const res = await apiClient.put("/store/settings", payload);
+    return res.data?.data ?? res.data;
+  },
+
+  // ─── RBAC Roles & Permissions ─────────────────────────────────
+  async getRbacRoles(): Promise<any[]> {
+    const res = await apiClient.get("/store/rbac/roles");
+    return res.data?.data ?? [];
+  },
+
+  async getRbacPermissions(): Promise<any[]> {
+    const res = await apiClient.get("/store/rbac/permissions");
+    return res.data?.data ?? [];
+  },
+
+  async updateRolePermissions(roleId: string, permissions: string[]): Promise<any> {
+    const res = await apiClient.put(`/store/rbac/roles/${roleId}/permissions`, { permissions });
+    return res.data?.data ?? res.data;
+  },
+
+  async assignUserRole(userId: string, roleName: string): Promise<any> {
+    const res = await apiClient.put(`/store/rbac/users/${userId}/role`, { roleName });
     return res.data?.data ?? res.data;
   },
 };

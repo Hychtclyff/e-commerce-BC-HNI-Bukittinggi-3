@@ -9,6 +9,7 @@ import { formatDate } from "@/utils/formatters";
 
 interface NewsItem {
   id: string;
+  slug?: string;
   title: string;
   summary?: string;
   category?: string;
@@ -116,7 +117,7 @@ export const NewsHighlightSection = () => {
         {displayList.map((item, idx) => (
           <Link
             key={item.id}
-            href="/news"
+            href={item.id ? `/news/${item.id}` : "/news"}
             className="group py-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:bg-surface/60 px-2 sm:px-3 transition-colors"
           >
             <div className="flex items-start gap-4 min-w-0">
@@ -132,11 +133,11 @@ export const NewsHighlightSection = () => {
                   </span>
                 </div>
                 <h3 className="text-base sm:text-lg font-extrabold text-text-primary group-hover:text-primary-sage transition-colors leading-snug">
-                  {item.title}
+                  {isEn && (item as any).titleEn ? (item as any).titleEn : item.title}
                 </h3>
-                {item.summary && (
+                {(item.summary || (item as any).summaryEn) && (
                   <p className="text-xs sm:text-sm text-text-muted line-clamp-1">
-                    {item.summary}
+                    {isEn && (item as any).summaryEn ? (item as any).summaryEn : item.summary}
                   </p>
                 )}
               </div>

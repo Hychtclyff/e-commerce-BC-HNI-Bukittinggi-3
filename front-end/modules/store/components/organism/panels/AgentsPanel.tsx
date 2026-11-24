@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import type { StoreAgent, StoreCustomer } from "../../../types/store.types";
 import type { AgentPayload } from "../../../api/store.api";
 import { storeApi } from "../../../api/store.api";
@@ -81,8 +81,31 @@ export const AgentsPanel: React.FC<IAgentsPanelProps> = ({
   const [isUsersLoading, setIsUsersLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [filterUserType, setFilterUserType] = useState("ALL");
+  const [filterRole, setFilterRole] = useState("ALL");
+  const [filterPosition, setFilterPosition] = useState("ALL");
   const [filterStatus, setFilterStatus] = useState("ALL");
+  const [availableRoles, setAvailableRoles] = useState<string[]>([
+    "OWNER",
+    "ADMIN",
+    "KASIR",
+    "GUDANG",
+    "AGEN_HNI",
+  ]);
+  const [availablePositions, setAvailablePositions] = useState<string[]>([
+    "AB",
+    "A",
+    "M",
+    "M - SC",
+    "ED",
+    "LED",
+  ]);
   const [totalUsers, setTotalUsers] = useState(0);
+
+  // Filter State untuk Tab Staf Toko
+  const [staffSearch, setStaffSearch] = useState("");
+  const [staffRoleFilter, setStaffRoleFilter] = useState("ALL");
+  const [staffPositionFilter, setStaffPositionFilter] = useState("ALL");
+  const [staffStatusFilter, setStaffStatusFilter] = useState("ALL");
 
   // Modal State untuk Pengguna Sistem
   const [selectedUserForDetail, setSelectedUserForDetail] = useState<string | null>(null);
@@ -105,17 +128,59 @@ export const AgentsPanel: React.FC<IAgentsPanelProps> = ({
       const res = await storeApi.getSystemUsers({
         search: searchQuery.trim() || undefined,
         userType: filterUserType !== "ALL" ? filterUserType : undefined,
+        role: filterRole !== "ALL" ? filterRole : undefined,
+        position: filterPosition !== "ALL" ? filterPosition : undefined,
         isActive: filterStatus !== "ALL" ? filterStatus : undefined,
         limit: 100,
       });
       setUsers(res.users || []);
       setTotalUsers(res.pagination?.total || 0);
+      if (res.facets?.roles?.length) setAvailableRoles(res.facets.roles);
+      if (res.facets?.positions?.length) setAvailablePositions(res.facets.positions);
     } catch (err) {
       console.error("Gagal memuat pengguna sistem:", err);
     } finally {
       setIsUsersLoading(false);
     }
-  }, [searchQuery, filterUserType, filterStatus]);
+  }, [searchQuery, filterUserType, filterRole, filterPosition, filterStatus]);
+
+  const filteredStaffAgents = useMemo(() => {
+    const q = staffSearch.trim().toLowerCase();
+    return agents.filter((agent) => {
+      if (q) {
+        const matchesSearch =
+          agent.name?.toLowerCase().includes(q) ||
+          agent.hniMemberId?.toLowerCase().includes(q) ||
+          agent.phoneNumber?.toLowerCase().includes(q);
+        if (!matchesSearch) return false;
+      }
+
+      if (staffRoleFilter !== "ALL") {
+        const agentRoles = (
+          agent.roles && agent.roles.length > 0 ? agent.roles : [agent.role]
+        ).map((r) => String(r || "").toUpperCase());
+        const target = staffRoleFilter.toUpperCase();
+        const matchesRole = agentRoles.some(
+          (r) => r === target || (target === "AGEN_HNI" && r === "AGEN")
+        );
+        if (!matchesRole) return false;
+      }
+
+      if (staffPositionFilter !== "ALL") {
+        if (String(agent.rank || "").toUpperCase() !== staffPositionFilter.toUpperCase()) {
+          return false;
+        }
+      }
+
+      if (staffStatusFilter !== "ALL") {
+        if (String(agent.status || "").toUpperCase() !== staffStatusFilter.toUpperCase()) {
+          return false;
+        }
+      }
+
+      return true;
+    });
+  }, [agents, staffSearch, staffRoleFilter, staffPositionFilter, staffStatusFilter]);
 
   useEffect(() => {
     if (subTab === "ALL_USERS") {
@@ -402,7 +467,7 @@ export const AgentsPanel: React.FC<IAgentsPanelProps> = ({
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
-              <div className="w-44">
+              <div className="w-40">
                 <TijarahSelect
                   value={filterUserType}
                   onChange={(val) => setFilterUserType(String(val || "ALL"))}
@@ -416,6 +481,34 @@ export const AgentsPanel: React.FC<IAgentsPanelProps> = ({
                 </TijarahSelect>
               </div>
 
+              <div className="w-40">
+                <TijarahSelect
+                  value={filterRole}
+                  onChange={(val) => setFilterRole(String(val || "ALL"))}
+                >
+                  <TijarahSelectItem id="ALL">Semua Role</TijarahSelectItem>
+                  {availableRoles.map((r) => (
+                    <TijarahSelectItem key={r} id={r}>
+                      {r}
+                    </TijarahSelectItem>
+                  ))}
+                </TijarahSelect>
+              </div>
+
+              <div className="w-40">
+                <TijarahSelect
+                  value={filterPosition}
+                  onChange={(val) => setFilterPosition(String(val || "ALL"))}
+                >
+                  <TijarahSelectItem id="ALL">Semua Posisi</TijarahSelectItem>
+                  {availablePositions.map((pos) => (
+                    <TijarahSelectItem key={pos} id={pos}>
+                      {pos}
+                    </TijarahSelectItem>
+                  ))}
+                </TijarahSelect>
+              </div>
+
               <div className="w-36">
                 <TijarahSelect
                   value={filterStatus}
@@ -426,6 +519,28 @@ export const AgentsPanel: React.FC<IAgentsPanelProps> = ({
                   <TijarahSelectItem id="false">Nonaktif</TijarahSelectItem>
                 </TijarahSelect>
               </div>
+
+              {(filterUserType !== "ALL" ||
+                filterRole !== "ALL" ||
+                filterPosition !== "ALL" ||
+                filterStatus !== "ALL" ||
+                searchQuery.trim() !== "") && (
+                <TijarahButton
+                  type="button"
+                  heroVariant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setSearchQuery("");
+                    setFilterUserType("ALL");
+                    setFilterRole("ALL");
+                    setFilterPosition("ALL");
+                    setFilterStatus("ALL");
+                  }}
+                  className="h-9 px-3 text-xs font-bold text-text-muted hover:text-text-primary"
+                >
+                  Reset
+                </TijarahButton>
+              )}
 
               <TijarahButton
                 type="button"
@@ -634,26 +749,88 @@ export const AgentsPanel: React.FC<IAgentsPanelProps> = ({
         <AgentNetworkPanel onRefreshParent={onRefreshAgents} />
       ) : (
         /* Tab STAFF_LIST (Staf & Kasir Gerai Lokal) */
-        <TijarahCard
-          tijarahVariant="default"
-          className="border border-border-subtle overflow-hidden mac-glass mac-shadow rounded-2xl"
-        >
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse text-xs">
-              <thead>
-                <tr className="border-b border-border-subtle bg-canvas/60 text-text-muted uppercase text-[10px] tracking-wider font-bold">
-                  <th className="py-3 px-4">{t("memberId")}</th>
-                  <th className="py-3 px-4">{t("agentName")}</th>
-                  <th className="py-3 px-4">{t("tier")}</th>
-                  <th className="py-3 px-4">{t("rank")}</th>
-                  <th className="py-3 px-4">{t("role")}</th>
-                  <th className="py-3 px-4">Keamanan Sandi</th>
-                  <th className="py-3 px-4 text-center">{t("status")}</th>
-                  <th className="py-3 px-4 text-right">Aksi</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border-subtle">
-                {agents.map((agent) => (
+        <div className="flex flex-col gap-4">
+          <div className="p-4 bg-surface border border-border-subtle mac-glass mac-shadow rounded-2xl flex flex-col md:flex-row gap-3 items-stretch md:items-center justify-between">
+            <div className="flex-1 relative">
+              <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none" />
+              <input
+                type="text"
+                value={staffSearch}
+                onChange={(e) => setStaffSearch(e.target.value)}
+                placeholder="Cari nama staf/agen, ID HNI, atau nomor HP..."
+                className="w-full pl-10 pr-4 py-2 text-xs bg-canvas/60 border border-border-subtle rounded-xl text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-1 focus:ring-primary-sage transition-all"
+              />
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="w-40">
+                <TijarahSelect
+                  value={staffRoleFilter}
+                  onChange={(val) => setStaffRoleFilter(String(val || "ALL"))}
+                >
+                  <TijarahSelectItem id="ALL">Semua Role</TijarahSelectItem>
+                  {availableRoles.map((r) => (
+                    <TijarahSelectItem key={r} id={r}>
+                      {r}
+                    </TijarahSelectItem>
+                  ))}
+                </TijarahSelect>
+              </div>
+
+              <div className="w-40">
+                <TijarahSelect
+                  value={staffPositionFilter}
+                  onChange={(val) => setStaffPositionFilter(String(val || "ALL"))}
+                >
+                  <TijarahSelectItem id="ALL">Semua Posisi</TijarahSelectItem>
+                  {availablePositions.map((pos) => (
+                    <TijarahSelectItem key={pos} id={pos}>
+                      {pos}
+                    </TijarahSelectItem>
+                  ))}
+                </TijarahSelect>
+              </div>
+
+              <div className="w-36">
+                <TijarahSelect
+                  value={staffStatusFilter}
+                  onChange={(val) => setStaffStatusFilter(String(val || "ALL"))}
+                >
+                  <TijarahSelectItem id="ALL">Semua Status</TijarahSelectItem>
+                  <TijarahSelectItem id="ACTIVE">Aktif</TijarahSelectItem>
+                  <TijarahSelectItem id="INACTIVE">Nonaktif</TijarahSelectItem>
+                </TijarahSelect>
+              </div>
+            </div>
+          </div>
+
+          <TijarahCard
+            tijarahVariant="default"
+            className="border border-border-subtle overflow-hidden mac-glass mac-shadow rounded-2xl"
+          >
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr className="border-b border-border-subtle bg-canvas/60 text-text-muted uppercase text-[10px] tracking-wider font-bold">
+                    <th className="py-3 px-4">{t("memberId")}</th>
+                    <th className="py-3 px-4">{t("agentName")}</th>
+                    <th className="py-3 px-4">{t("tier")}</th>
+                    <th className="py-3 px-4">{t("rank")}</th>
+                    <th className="py-3 px-4">{t("role")}</th>
+                    <th className="py-3 px-4">Keamanan Sandi</th>
+                    <th className="py-3 px-4 text-center">{t("status")}</th>
+                    <th className="py-3 px-4 text-right">Aksi</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border-subtle">
+                  {filteredStaffAgents.length === 0 ? (
+                    <tr>
+                      <td colSpan={8} className="py-8 text-center text-xs text-text-muted">
+                        Tidak ada staf/agen yang cocok dengan filter Role atau Posisi.
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredStaffAgents.map((agent) => (
                   <tr key={agent.id} className="hover:bg-canvas/40 transition-colors">
                     <td className="py-3.5 px-4 font-mono font-bold text-text-muted">
                       {agent.hniMemberId || "-"}
@@ -727,11 +904,13 @@ export const AgentsPanel: React.FC<IAgentsPanelProps> = ({
                       </div>
                     </td>
                   </tr>
-                ))}
+                    ))
+                  )}
               </tbody>
             </table>
           </div>
         </TijarahCard>
+        </div>
       )}
 
       {/* Modal Form Pengguna Sistem (Buat & Edit) */}

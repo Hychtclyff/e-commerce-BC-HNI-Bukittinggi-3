@@ -21,6 +21,7 @@ export interface IOrderActionButtonsProps {
   onComplete?: (orderId: string) => void;
   onReadyForPickup?: (orderId: string) => void;
   onReject: (order: StoreOrder) => void;
+  onConfirmRefund?: (order: StoreOrder) => void;
   onPrint: (order: StoreOrder) => void;
   onViewDetail?: (order: StoreOrder) => void;
   isAdvancing?: boolean;
@@ -34,6 +35,7 @@ export const OrderActionButtons: React.FC<IOrderActionButtonsProps> = ({
   onComplete,
   onReadyForPickup,
   onReject,
+  onConfirmRefund,
   onPrint,
   onViewDetail,
   isAdvancing = false,
@@ -106,13 +108,26 @@ export const OrderActionButtons: React.FC<IOrderActionButtonsProps> = ({
     }
   }
 
-  if (isPaidOrProcessing || isPendingCashStore) {
+  if (isPaidOrProcessing || isPendingCashStore || isReadyForPickup) {
     menuItems.push({
       key: "reject",
       label: t("actionReject"),
       icon: <X className="w-3.5 h-3.5 text-status-danger" />,
       onSelect: () => onReject(order),
       destructive: true,
+    });
+  }
+
+  if (
+    onConfirmRefund &&
+    (order.status === "CANCELLED" || order.status === "REJECTED") &&
+    order.paymentStatus === "REFUND_PENDING"
+  ) {
+    menuItems.push({
+      key: "confirm-refund",
+      label: "Konfirmasi Refund Dana",
+      icon: <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />,
+      onSelect: () => onConfirmRefund(order),
     });
   }
 

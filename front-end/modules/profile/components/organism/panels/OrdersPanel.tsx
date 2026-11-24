@@ -11,6 +11,7 @@ import { TijarahButton } from "@/components/atom/tijarahButton";
 import { TijarahModal } from "@/components/atom/tijarahModal";
 import { TijarahTextArea } from "@/components/atom/tijarahTextArea";
 import { OrderReceiptModal } from "../../molecules/OrderReceiptModal";
+import { ReturnsProfilePanel } from "./ReturnsProfilePanel";
 import { useProfileTranslation } from "../../../hooks/useProfileTranslation";
 import { useOrders } from "../../../hooks/useOrders";
 import { formatCurrency } from "@/utils/formatters";
@@ -51,8 +52,8 @@ export function OrdersPanel({
 }: OrdersPanelProps) {
   const { t } = useProfileTranslation();
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<OrderStatusType>(
-    initialTab || "ALL",
+  const [activeTab, setActiveTab] = useState<OrderStatusType | "RETURNS">(
+    (initialTab as OrderStatusType | "RETURNS") || "ALL",
   );
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [selectedOrderForModal, setSelectedOrderForModal] =
@@ -78,7 +79,7 @@ export function OrdersPanel({
     confirmDelivered,
     isConfirming,
   } = useOrders({
-    status: activeTab === "ALL" ? undefined : activeTab,
+    status: activeTab === "ALL" || activeTab === "RETURNS" ? undefined : activeTab,
     search: searchQuery || undefined,
   });
 
@@ -105,7 +106,7 @@ export function OrdersPanel({
   }, [rawOrders, activeTab, searchQuery]);
 
   // Tab definitions dengan badge counters dari API
-  const tabs: { id: OrderStatusType; label: string; count: number }[] = [
+  const tabs: { id: OrderStatusType | "RETURNS"; label: string; count?: number }[] = [
     { id: "ALL", label: t("all", "Semua"), count: counts.ALL || rawOrders.length },
     {
       id: "PENDING_PAYMENT",
@@ -117,6 +118,7 @@ export function OrdersPanel({
     { id: "COMPLETED", label: t("completed", "Selesai"), count: counts.COMPLETED || 0 },
     { id: "REJECTED", label: t("rejectedTab", "Ditolak"), count: counts.REJECTED || 0 },
     { id: "CANCELLED", label: t("cancelled", "Dibatalkan"), count: counts.CANCELLED || 0 },
+    { id: "RETURNS", label: "Retur & Komplain" },
   ];
 
   // Aksi Pembatalan Pesanan
@@ -255,8 +257,10 @@ export function OrdersPanel({
         })}
       </div>
 
-      {/* 4. Orders List */}
-      {displayedOrders.length > 0 ? (
+      {/* 4. Orders List atau Tab Retur & Komplain (#26ECF82F) */}
+      {activeTab === "RETURNS" ? (
+        <ReturnsProfilePanel />
+      ) : displayedOrders.length > 0 ? (
         <div className="flex flex-col gap-4">
           {displayedOrders.map((ord) => {
             const invoiceNo = ord.orderNumber || ord.invoiceNo;

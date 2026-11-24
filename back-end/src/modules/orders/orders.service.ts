@@ -1,4 +1,4 @@
-import { db } from "@/prisma/db";
+import { db, pool } from "@/prisma/db";
 import { AppError } from "@/utils/AppError";
 import { SupportedLanguage, t } from "@/i18n";
 import { GetUserOrdersQuery, CancelOrderBody } from "./orders.schema";
@@ -299,9 +299,33 @@ export const ordersService = {
                 throw new AppError(t('common.forbidden', {}, lang), 403);
             }
 
-            // HANYA PENDING_PAYMENT yang bisa dibatalkan
-            if (order.orderStatus !== "PENDING_PAYMENT") {
+            // Boleh dibatalkan saat PENDING_PAYMENT, WAITING_APPROVAL, atau PROCESSING (maksimal 1 jam setelah order dibuat, dan belum READY_FOR_PICKUP/SHIPPED/COMPLETED)
+            const cancellableStatuses = new Set(["PENDING_PAYMENT", "WAITING_APPROVAL", "PROCESSING"]);
+            if (!cancellableStatuses.has(order.orderStatus)) {
                 throw new AppError(t('orders.cannot_cancel', {}, lang), 400);
+            }
+
+            if (order.orderStatus === "PROCESSING" || order.paymentStatus === "PAID") {
+                const createdMs = new Date(order.createdAt).getTime();
+                const oneHourMs = 60 * 60 * 1000;
+                if (Number.isFinite(createdMs) && Date.now() - createdMs > oneHourMs) {
+                    throw new AppError(
+                        lang === "en"
+                            ? "Orders in processing can only be cancelled within 1 hour of creation."
+                            : "Pesanan yang sedang dikemas hanya dapat dibatalkan maksimal 1 jam setelah pemesanan.",
+                        400
+                    );
+                }
+            }
+
+            const isPaidOrder = order.paymentStatus === "PAID";
+            if (isPaidOrder && (!payload.refundBankName?.trim() || !payload.refundAccountNumber?.trim() || !payload.refundAccountName?.trim())) {
+                throw new AppError(
+                    lang === "en"
+                        ? "Please provide bank/e-wallet details for refund."
+                        : "Pesanan sudah lunas. Wajib mengisi tujuan Bank/E-Wallet, Nomor Rekening, dan Atas Nama untuk pengembalian dana.",
+                    400
+                );
             }
 
             let creditRestored = false;
@@ -347,13 +371,35 @@ export const ordersService = {
             }
 
             // Update order status
+            const nextPaymentStatus = creditRestored
+                ? "REFUNDED"
+                : isPaidOrder
+                  ? "REFUND_PENDING"
+                  : order.paymentStatus;
+
             await db.orm.orders.Order
                 .where({ id: order.id })
                 .update({
                     orderStatus: "CANCELLED",
                     cancellationReason: payload.reason || "Pembatalan oleh pelanggan",
-                    paymentStatus: creditRestored ? "REFUNDED" : order.paymentStatus,
+                    paymentStatus: nextPaymentStatus,
                 });
+
+            if (isPaidOrder) {
+                await pool.query(
+                    `UPDATE orders.orders
+                     SET refund_bank_name = $1,
+                         refund_account_number = $2,
+                         refund_account_name = $3
+                     WHERE id = $4`,
+                    [
+                        payload.refundBankName?.trim() || null,
+                        payload.refundAccountNumber?.trim() || null,
+                        payload.refundAccountName?.trim() || null,
+                        order.id,
+                    ]
+                );
+            }
 
             await notificationsService.createNotification({
                 userId,
@@ -419,6 +465,33 @@ export const ordersService = {
             if (error instanceof AppError) throw error;
             throw new AppError(t('orders.confirm_delivered_failed', { message: error.message }, lang), 500);
         }
+    },
+
+    async confirmRefundReceived(orderId: string, userId: string) {
+        const orderRes = await pool.query(
+            `SELECT id, "userId", "orderNumber", "paymentStatus" FROM orders.orders WHERE id = $1 LIMIT 1`,
+            [orderId]
+        );
+        if (orderRes.rows.length === 0) throw new AppError('Pesanan tidak ditemukan.', 404);
+        const order = orderRes.rows[0];
+        if (order.userId !== userId) throw new AppError('Anda tidak berhak mengakses pesanan ini.', 403);
+        if (String(order.paymentStatus || '').toUpperCase() !== 'REFUNDED') {
+            throw new AppError('Status pengembalian dana belum ditandai REFUNDED oleh toko.', 400);
+        }
+
+        await pool.query(
+            `UPDATE orders.orders
+             SET refund_confirmed_by_user = TRUE, refund_confirmed_at = NOW(), "updatedAt" = NOW()
+             WHERE id = $1`,
+            [order.id]
+        );
+
+        return {
+            id: order.id,
+            orderNumber: order.orderNumber,
+            refundConfirmedByUser: true,
+            refundConfirmedAt: new Date().toISOString(),
+        };
     }
 
 };

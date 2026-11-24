@@ -3,16 +3,18 @@
 import React, { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { TijarahModal } from "@/components/atom/tijarahModal";
+import { TijarahCard } from "@/components/atom/tijarahCard";
+import { TijarahButton } from "@/components/atom/tijarahButton";
 import { TijarahInput } from "@/components/atom/tijarahInput";
-import { TijarahTextArea } from "@/components/atom/tijarahTextArea";
+import { TijarahSelect } from "@/components/atom/tijarahSelect";
 import { TijarahSwitch } from "@/components/atom/tijarahSwitch";
 import { inventorySchema, type InventoryFormData } from "../../../schemas/store.schema";
 import type { StoreInventoryItem } from "../../../types/store.types";
-import type { InventoryPayload } from "../../../api/store.api";
+import { storeApi, type InventoryPayload } from "../../../api/store.api";
+import { mediaApi, type MediaAsset } from "@/modules/media/api/media.api";
 import { formatCurrency } from "@/utils/formatters";
 import { showToast } from "@/utils/toast";
-import { Layers, Sparkles, AlertCircle } from "lucide-react";
+import { Layers, AlertCircle, ArrowLeft, Plus, Save } from "lucide-react";
 import { MediaUploader } from "@/modules/media/components/MediaUploader";
 
 export interface IInventoryFormModalProps {
@@ -21,6 +23,7 @@ export interface IInventoryFormModalProps {
   item: StoreInventoryItem | null;
   onSubmit: (payload: InventoryPayload) => Promise<void>;
   isLoading: boolean;
+  existingImageUrls?: string[];
 }
 
 export const InventoryFormModal: React.FC<IInventoryFormModalProps> = ({
@@ -29,12 +32,20 @@ export const InventoryFormModal: React.FC<IInventoryFormModalProps> = ({
   item,
   onSubmit,
   isLoading,
+  existingImageUrls = [],
 }) => {
   const isEdit = !!item;
   const [isSeparable, setIsSeparable] = useState<boolean>(false);
   const [breakdownType, setBreakdownType] = useState<"SINGLE" | "MIX">("SINGLE");
   const [autoBreakdownOneStock, setAutoBreakdownOneStock] = useState<boolean>(false);
   const [imageUrl, setImageUrl] = useState<string>("");
+  const [categories, setCategories] = useState<{ id: string; name: string }[]>([]);
+  const [units, setUnits] = useState<{ id: string; code: string; name: string }[]>([]);
+  const [mediaAssets, setMediaAssets] = useState<MediaAsset[]>([]);
+  const [newCategoryName, setNewCategoryName] = useState("");
+  const [showNewCategory, setShowNewCategory] = useState(false);
+  const [newUnitName, setNewUnitName] = useState("");
+  const [showNewUnit, setShowNewUnit] = useState(false);
 
   const {
     register,
@@ -69,8 +80,46 @@ export const InventoryFormModal: React.FC<IInventoryFormModalProps> = ({
   const watchRegularPrice = watch("regularPrice") || 0;
   const watchBreakdownQty = watch("defaultBreakdownQty") || 20;
   const watchStock = watch("stock") || 0;
+  const watchCategory = watch("category") || "Herbal";
+  const watchUnit = watch("unit") || "Botol";
 
   const estimatedSachetPrice = Math.round(Number(watchRegularPrice) / (Number(watchBreakdownQty) || 1));
+
+  useEffect(() => {
+    if (!isOpen) return;
+    storeApi.getProductCategories().then(setCategories).catch(() => {});
+    storeApi.getProductUnits().then(setUnits).catch(() => {});
+    mediaApi.listMedia({ category: "PRODUCT", type: "IMAGE" }).then(setMediaAssets).catch(() => {});
+  }, [isOpen]);
+
+  const handleAddNewCategory = async () => {
+    if (!newCategoryName.trim()) return;
+    try {
+      const created = await storeApi.createProductCategory(newCategoryName.trim());
+      setCategories((prev) => [...prev, created]);
+      setValue("category", created.name, { shouldValidate: true });
+      setNewCategoryName("");
+      setShowNewCategory(false);
+      showToast.success("Kategori Ditambahkan", `Kategori "${created.name}" berhasil disimpan.`);
+    } catch (err: any) {
+      showToast.error("Gagal Menambah Kategori", err?.message || "Terjadi kesalahan.");
+    }
+  };
+
+  const handleAddNewUnit = async () => {
+    if (!newUnitName.trim()) return;
+    try {
+      const code = newUnitName.trim().toUpperCase().replace(/[^A-Z0-9]/g, "_").slice(0, 16);
+      const created = await storeApi.createProductUnit({ code, name: newUnitName.trim() });
+      setUnits((prev) => [...prev, created]);
+      setValue("unit", created.name, { shouldValidate: true });
+      setNewUnitName("");
+      setShowNewUnit(false);
+      showToast.success("Satuan Ditambahkan", `Satuan "${created.name}" berhasil disimpan.`);
+    } catch (err: any) {
+      showToast.error("Gagal Menambah Satuan", err?.message || "Terjadi kesalahan.");
+    }
+  };
 
   useEffect(() => {
     setAutoBreakdownOneStock(false);
@@ -129,9 +178,35 @@ export const InventoryFormModal: React.FC<IInventoryFormModalProps> = ({
     }
   };
 
+  const handleFormInvalid = (fieldErrors: any) => {
+    const firstErr = Object.values(fieldErrors)[0] as { message?: string } | undefined;
+    showToast.error(
+      "Validasi Produk Gagal",
+      firstErr?.message || "Mohon periksa kembali kolom wajib dan pastikan tidak ada nilai negatif."
+    );
+  };
+
   const handleFormSubmit = async (data: InventoryFormData) => {
+    if (Number(data.stock) < 0 || Number(data.regularPrice) <= 0 || Number(data.agentPrice) < 0 || Number(data.points) < 0) {
+      showToast.error("Nilai Tidak Valid", "Stok, harga agen, dan poin tidak boleh negatif; harga konsumen minimal Rp 1.");
+      return;
+    }
+
     if (isSeparable && autoBreakdownOneStock && Number(data.stock) < 1) {
       showToast.error("Stok Tidak Cukup", "Stok produk induk minimal 1 kemasan agar dapat langsung diecerkan.");
+      return;
+    }
+
+    const finalImageUrl = (imageUrl || item?.imageUrl || "").trim();
+    if (
+      finalImageUrl &&
+      finalImageUrl !== "/images/products/default.png" &&
+      existingImageUrls.includes(finalImageUrl)
+    ) {
+      showToast.error(
+        "Foto Produk Duplikat",
+        "Gambar yang dipilih sudah digunakan oleh produk lain. Gunakan gambar berbeda atau unggah foto baru."
+      );
       return;
     }
 
@@ -147,37 +222,75 @@ export const InventoryFormModal: React.FC<IInventoryFormModalProps> = ({
       points: data.points,
       expirationDate: data.expirationDate,
       description: data.description,
-      imageUrl: imageUrl || item?.imageUrl || "/images/products/default.png",
+      imageUrl: finalImageUrl || "/images/products/default.png",
       isSeparable: isSeparable,
       defaultBreakdownQty: isSeparable ? Number(data.defaultBreakdownQty) : null,
       allowAgentPrice: data.allowAgentPrice !== false,
-      physicalStock: data.physicalStock ?? data.stock,
+      physicalStock: data.stock,
       pointStock: data.pointStock ?? data.stock,
       autoBreakdownOneStock: isSeparable && autoBreakdownOneStock,
     });
     onClose();
   };
 
+  if (!isOpen) return null;
+
+  const categoryOptions = Array.from(
+    new Set([
+      "Herbal",
+      "Suplemen",
+      "Kosmetik",
+      "Makanan Sehat",
+      ...categories.map((c) => c.name),
+      watchCategory,
+    ].filter(Boolean))
+  );
+
+  const unitOptions = Array.from(
+    new Set([
+      "Botol",
+      "Pouch",
+      "Box",
+      "Tube",
+      "Sachet",
+      "Pcs",
+      ...units.map((u) => u.name),
+      watchUnit,
+    ].filter(Boolean))
+  );
+
+  const selectableMedia = mediaAssets.filter((m) => Boolean(m.publicUrl));
+
   return (
-    <TijarahModal
-      isOpen={isOpen}
-      onClose={onClose}
-      title={isEdit ? `Edit Produk #${item.sku}` : "Tambah Produk Master Baru"}
-      description={
-        isEdit
-          ? "Perbarui informasi inventori, harga agen, rasio eceran, dan saldo stok fisik vs poin."
-          : "Daftarkan SKU baru ke dalam katalog inventori Business Center HNI."
-      }
-      confirmText={isEdit ? "Simpan Perubahan" : "Tambah Produk"}
-      confirmVariant="primary"
-      isConfirmLoading={isLoading}
-      onConfirm={handleSubmit(handleFormSubmit)}
-      showCancelButton
-      cancelText="Batal"
-      maxWidth="2xl"
-    >
-      <form onSubmit={handleSubmit(handleFormSubmit)} className="space-y-4 pt-1 max-h-[75vh] overflow-y-auto px-0.5">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+    <TijarahCard tijarahVariant="default" className="p-5 sm:p-6 space-y-5 w-full">
+      {/* Header Inline Form (#24) */}
+      <div className="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-border-subtle">
+        <div className="flex items-center gap-3">
+          <TijarahButton
+            type="button"
+            size="sm"
+            tijarahVariant="outline"
+            onClick={onClose}
+            className="text-xs font-bold flex items-center gap-1.5"
+          >
+            <ArrowLeft className="w-3.5 h-3.5" />
+            <span>Kembali</span>
+          </TijarahButton>
+          <div>
+            <h2 className="text-base font-bold text-text-primary">
+              {isEdit ? `Edit Produk #${item.sku}` : "Tambah Produk Master Baru"}
+            </h2>
+            <p className="text-xs text-text-muted">
+              {isEdit
+                ? "Perbarui informasi inventori, harga agen, rasio eceran, dan saldo stok fisik vs poin."
+                : "Daftarkan SKU baru ke dalam katalog inventori Business Center HNI."}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <form onSubmit={handleSubmit(handleFormSubmit, handleFormInvalid)} className="space-y-5">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <TijarahInput
               label="Kode SKU Produk*"
@@ -201,34 +314,95 @@ export const InventoryFormModal: React.FC<IInventoryFormModalProps> = ({
           </div>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <div>
-            <TijarahInput
-              label="Kategori Produk*"
-              placeholder="Herbal / Suplemen / Kosmetik / Makanan Sehat"
-              {...register("category")}
-              isInvalid={!!errors.category}
-              errorMessage={errors.category?.message as string}
-              className="text-xs"
-            />
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {/* Kategori Dropdown (#26) */}
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <label className="block text-xs font-medium text-text-primary">Kategori Produk*</label>
+              <button
+                type="button"
+                onClick={() => setShowNewCategory((v) => !v)}
+                className="text-[11px] font-semibold text-primary-sage hover:underline inline-flex items-center gap-0.5 cursor-pointer"
+              >
+                <Plus className="w-3 h-3" /> {showNewCategory ? "Tutup" : "Kategori Baru"}
+              </button>
+            </div>
+            <TijarahSelect
+              aria-label="Kategori Produk"
+              selectedKey={watchCategory}
+              onSelectionChange={(key) => setValue("category", String(key), { shouldValidate: true })}
+            >
+              {categoryOptions.map((cat) => (
+                <TijarahSelect.Item key={cat} id={cat}>
+                  {cat}
+                </TijarahSelect.Item>
+              ))}
+            </TijarahSelect>
+            {errors.category && (
+              <p className="text-[11px] text-status-danger">{errors.category.message as string}</p>
+            )}
+            {showNewCategory && (
+              <div className="flex items-center gap-2 pt-1">
+                <TijarahInput
+                  placeholder="Nama kategori baru..."
+                  value={newCategoryName}
+                  onChange={(e) => setNewCategoryName(e.target.value)}
+                  className="text-xs flex-1"
+                />
+                <TijarahButton type="button" size="sm" tijarahVariant="primary" onClick={handleAddNewCategory}>
+                  Simpan
+                </TijarahButton>
+              </div>
+            )}
           </div>
 
-          <div>
-            <TijarahInput
-              label="Satuan Barang*"
-              placeholder="Botol / Pouch / Box / Tube / Sachet"
-              {...register("unit")}
-              isInvalid={!!errors.unit}
-              errorMessage={errors.unit?.message as string}
-              className="text-xs"
-            />
+          {/* Satuan Barang Dropdown (#27) */}
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <label className="block text-xs font-medium text-text-primary">Satuan Barang*</label>
+              <button
+                type="button"
+                onClick={() => setShowNewUnit((v) => !v)}
+                className="text-[11px] font-semibold text-primary-sage hover:underline inline-flex items-center gap-0.5 cursor-pointer"
+              >
+                <Plus className="w-3 h-3" /> {showNewUnit ? "Tutup" : "Satuan Baru"}
+              </button>
+            </div>
+            <TijarahSelect
+              aria-label="Satuan Barang"
+              selectedKey={watchUnit}
+              onSelectionChange={(key) => setValue("unit", String(key), { shouldValidate: true })}
+            >
+              {unitOptions.map((u) => (
+                <TijarahSelect.Item key={u} id={u}>
+                  {u}
+                </TijarahSelect.Item>
+              ))}
+            </TijarahSelect>
+            {errors.unit && (
+              <p className="text-[11px] text-status-danger">{errors.unit.message as string}</p>
+            )}
+            {showNewUnit && (
+              <div className="flex items-center gap-2 pt-1">
+                <TijarahInput
+                  placeholder="Nama satuan baru (mis. Dus / Strip)..."
+                  value={newUnitName}
+                  onChange={(e) => setNewUnitName(e.target.value)}
+                  className="text-xs flex-1"
+                />
+                <TijarahButton type="button" size="sm" tijarahVariant="primary" onClick={handleAddNewUnit}>
+                  Simpan
+                </TijarahButton>
+              </div>
+            )}
           </div>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <TijarahInput
               type="number"
+              min={0}
               label="Stok Master Sistem*"
               placeholder="0"
               {...register("stock")}
@@ -241,18 +415,7 @@ export const InventoryFormModal: React.FC<IInventoryFormModalProps> = ({
           <div>
             <TijarahInput
               type="number"
-              label="Stok Fisik Gudang"
-              placeholder="0"
-              {...register("physicalStock")}
-              isInvalid={!!errors.physicalStock}
-              errorMessage={errors.physicalStock?.message as string}
-              className="text-xs font-semibold text-text-primary"
-            />
-          </div>
-
-          <div>
-            <TijarahInput
-              type="number"
+              min={0}
               label="Saldo Poin Tercatat"
               placeholder="0"
               {...register("pointStock")}
@@ -267,6 +430,7 @@ export const InventoryFormModal: React.FC<IInventoryFormModalProps> = ({
           <div>
             <TijarahInput
               type="number"
+              min={1}
               label="Harga Konsumen (Rp)*"
               placeholder="85000"
               {...register("regularPrice")}
@@ -279,6 +443,7 @@ export const InventoryFormModal: React.FC<IInventoryFormModalProps> = ({
           <div>
             <TijarahInput
               type="number"
+              min={0}
               label="Harga Agen HNI (Rp)*"
               placeholder="70000"
               {...register("agentPrice")}
@@ -291,6 +456,7 @@ export const InventoryFormModal: React.FC<IInventoryFormModalProps> = ({
           <div>
             <TijarahInput
               type="number"
+              min={0}
               label="Poin TP HNI*"
               placeholder="20"
               {...register("points")}
@@ -429,7 +595,7 @@ export const InventoryFormModal: React.FC<IInventoryFormModalProps> = ({
           )}
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <TijarahInput
               type="date"
@@ -441,13 +607,38 @@ export const InventoryFormModal: React.FC<IInventoryFormModalProps> = ({
             />
           </div>
 
-          <div>
-            <TijarahTextArea
-              label="Deskripsi / Khasiat Singkat"
-              placeholder="Sinergi herba untuk daya tahan tubuh..."
-              {...register("description")}
-              className="text-xs min-h-[60px]"
-            />
+          <div className="space-y-1.5">
+            <label className="block text-xs font-medium text-text-primary">
+              Pilih dari Media Library (Opsional)
+            </label>
+            <TijarahSelect
+              aria-label="Pilih dari Media Library"
+              selectedKey={selectableMedia.some((m) => m.publicUrl === imageUrl) ? imageUrl : ""}
+              onSelectionChange={(key) => {
+                const chosen = String(key || "");
+                if (!chosen) return;
+                if (
+                  chosen !== "/images/products/default.png" &&
+                  existingImageUrls.includes(chosen)
+                ) {
+                  showToast.warning(
+                    "Gambar Sudah Dipakai",
+                    "Gambar ini sudah dipakai oleh produk lain. Sebaiknya gunakan gambar unik untuk setiap SKU."
+                  );
+                }
+                setImageUrl(chosen);
+              }}
+              placeholder="Pilih gambar yang sudah diunggah..."
+            >
+              {selectableMedia.map((asset) => (
+                <TijarahSelect.Item key={asset.id} id={asset.publicUrl || asset.id}>
+                  {asset.fileName}
+                </TijarahSelect.Item>
+              ))}
+            </TijarahSelect>
+            <span className="text-[10px] text-text-muted block">
+              Pilih foto dari Media Library atau unggah foto baru di bawah ini.
+            </span>
           </div>
         </div>
 
@@ -456,14 +647,45 @@ export const InventoryFormModal: React.FC<IInventoryFormModalProps> = ({
           entityId={item?.id}
           accept="image"
           value={imageUrl}
-          onChange={setImageUrl}
+          onChange={(url) => {
+            if (url && url !== "/images/products/default.png" && existingImageUrls.includes(url)) {
+              showToast.warning(
+                "Gambar Sudah Dipakai",
+                "Gambar ini sudah digunakan oleh produk lain."
+              );
+            }
+            setImageUrl(url);
+          }}
           label="Foto Produk (Drag & Drop)"
           helperText="Tarik & lepas gambar produk atau klik untuk unggah ke Supabase Storage"
-          allowManualUrl
+          allowManualUrl={false}
           compact
         />
+
+        <div className="flex items-center justify-end gap-2.5 pt-4 border-t border-border-subtle">
+          <TijarahButton
+            type="button"
+            tijarahVariant="outline"
+            size="sm"
+            onClick={onClose}
+            isDisabled={isLoading}
+            className="text-xs font-bold px-4"
+          >
+            Batal
+          </TijarahButton>
+          <TijarahButton
+            type="submit"
+            tijarahVariant="primary"
+            size="sm"
+            isLoading={isLoading}
+            className="text-xs font-bold px-5 flex items-center gap-1.5"
+          >
+            <Save className="w-3.5 h-3.5" />
+            <span>{isEdit ? "Simpan Perubahan" : "Tambah Produk"}</span>
+          </TijarahButton>
+        </div>
       </form>
-    </TijarahModal>
+    </TijarahCard>
   );
 };
 

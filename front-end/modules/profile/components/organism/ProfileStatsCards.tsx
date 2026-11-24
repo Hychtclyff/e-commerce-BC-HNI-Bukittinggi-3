@@ -36,14 +36,14 @@ export function ProfileStatsCards({
       icon: <Star className="w-6 h-6 text-accent-gold" />,
       color: "border-accent-gold/40 text-accent-gold bg-accent-gold/5",
     },
-    {
-      id: "credit",
-      title: t("statsRemainingCredit"),
-      value: `Rp ${availableCredit.toLocaleString(numLocale)}`,
-      subtitle: `${t("totalCreditLimit")}: Rp ${creditLimit.toLocaleString(numLocale)}`,
-      icon: <CreditCard className="w-6 h-6 text-primary-sage" />,
-      color: "border-primary-sage/40 text-primary-sage bg-primary-sage/5",
-    },
+    // {
+    //   id: "credit",
+    //   title: t("statsRemainingCredit"),
+    //   value: `Rp ${availableCredit.toLocaleString(numLocale)}`,
+    //   subtitle: `${t("totalCreditLimit")}: Rp ${creditLimit.toLocaleString(numLocale)}`,
+    //   icon: <CreditCard className="w-6 h-6 text-primary-sage" />,
+    //   color: "border-primary-sage/40 text-primary-sage bg-primary-sage/5",
+    // },
     {
       id: "orders",
       title: t("statsActiveOrders"),

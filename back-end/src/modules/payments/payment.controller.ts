@@ -118,14 +118,16 @@ export const paymentController = {
 
         res.raw.write(`event: connected\ndata: ${JSON.stringify({ ok: true, orderKey: orderKey || "ALL" })}\n\n`);
 
+        const targetKey = String(orderKey || "").trim().toLowerCase();
+
         const onOrderUpdated = (payload: OrderRealtimeEvent) => {
-            if (
-                orderKey &&
-                payload.orderId !== orderKey &&
-                payload.slug !== orderKey &&
-                payload.orderNumber !== orderKey
-            ) {
-                return;
+            if (targetKey && targetKey !== "all") {
+                const matchesId = String(payload.orderId || "").toLowerCase() === targetKey;
+                const matchesSlug = String(payload.slug || "").toLowerCase() === targetKey;
+                const matchesNumber = String(payload.orderNumber || "").toLowerCase() === targetKey;
+                if (!matchesId && !matchesSlug && !matchesNumber) {
+                    return;
+                }
             }
             res.raw.write(`event: order-updated\ndata: ${JSON.stringify(payload)}\n\n`);
         };

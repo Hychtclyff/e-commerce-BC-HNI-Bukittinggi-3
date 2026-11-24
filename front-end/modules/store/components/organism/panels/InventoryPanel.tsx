@@ -259,6 +259,25 @@ export const InventoryPanel: React.FC<IInventoryPanelProps> = ({
     [nonHniProducts]
   );
 
+  if (isFormOpen) {
+    const existingImageUrls = inventory
+      .filter((inv) => inv.id !== selectedItemForEdit?.id && inv.imageUrl)
+      .map((inv) => String(inv.imageUrl));
+
+    return (
+      <div className="flex flex-col gap-3 w-full">
+        <InventoryFormModal
+          isOpen={isFormOpen}
+          onClose={() => setIsFormOpen(false)}
+          item={selectedItemForEdit}
+          onSubmit={handleSubmitForm}
+          isLoading={isSaving}
+          existingImageUrls={existingImageUrls}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col gap-3 w-full">
       {/* 1. Shared Unified Header & Tab Bar (Identical Rhythm for HNI & Non-HNI) */}
@@ -928,15 +947,6 @@ export const InventoryPanel: React.FC<IInventoryPanelProps> = ({
         parentProduct={selectedItemForBreakdown}
         onSubmit={handleExecuteBreakdown}
         isLoading={isBreakdownLoading}
-      />
-
-      {/* Modal Form Tambah / Edit Produk */}
-      <InventoryFormModal
-        isOpen={isFormOpen}
-        onClose={() => setIsFormOpen(false)}
-        item={selectedItemForEdit}
-        onSubmit={handleSubmitForm}
-        isLoading={isSaving}
       />
 
       {/* Modal Konfirmasi Hapus Produk */}

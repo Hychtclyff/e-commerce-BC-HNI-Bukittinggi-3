@@ -126,7 +126,10 @@ export const shopApi = {
 
   getVouchers: async (): Promise<VoucherItem[]> => {
     try {
-      const res = await apiClient.get<{ status: string; data: any[] }>("/vouchers");
+      const res = await apiClient.get<{ status: string; data: any[] }>("/vouchers", {
+        skipAuthRedirect: true,
+        skipGlobalToast: true,
+      } as any);
       const list = res.data?.data ?? res.data;
       if (Array.isArray(list)) {
         cachedDbVouchers = list.map((item: any) => ({
@@ -243,5 +246,55 @@ export const shopApi = {
     };
 
     return receipt;
+  },
+
+  getProductReviews: async (productId: string) => {
+    const res = await apiClient.get(`/products/${productId}/reviews`, {
+      skipAuthRedirect: true,
+      skipGlobalToast: true,
+    } as any);
+    return res.data?.data ?? { averageRating: 0, totalReviews: 0, reviews: [] };
+  },
+
+  createProductReview: async (productId: string, payload: { rating: number; comment?: string }) => {
+    const res = await apiClient.post(`/products/${productId}/reviews`, payload);
+    return res.data?.data ?? res.data;
+  },
+
+  getRelatedProducts: async (productId: string) => {
+    const res = await apiClient.get(`/products/${productId}/related`, {
+      skipAuthRedirect: true,
+      skipGlobalToast: true,
+    } as any);
+    return res.data?.data ?? [];
+  },
+
+  getWishlist: async () => {
+    const res = await apiClient.get("/profile/wishlist", {
+      skipAuthRedirect: true,
+      skipGlobalToast: true,
+    } as any);
+    return res.data?.data ?? [];
+  },
+
+  toggleWishlist: async (productId: string) => {
+    const res = await apiClient.post("/profile/wishlist/toggle", { productId });
+    return res.data?.data ?? { productId, wishlisted: false };
+  },
+
+  getOrderReturn: async (orderId: string) => {
+    const res = await apiClient.get(`/orders/${orderId}/return`, {
+      skipAuthRedirect: true,
+      skipGlobalToast: true,
+    } as any);
+    return res.data?.data ?? null;
+  },
+
+  createOrderReturn: async (
+    orderId: string,
+    payload: { reason: string; description: string; evidenceUrl?: string }
+  ) => {
+    const res = await apiClient.post(`/orders/${orderId}/return`, payload);
+    return res.data?.data ?? res.data;
   },
 };

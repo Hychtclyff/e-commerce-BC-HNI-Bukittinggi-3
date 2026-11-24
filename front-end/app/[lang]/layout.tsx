@@ -6,6 +6,7 @@ import "@/styles/globals.css";
 import { GoogleAnalytics } from "@/components/analytics/GoogleAnalytics";
 import { MetaPixel } from "@/components/analytics/MetaPixel";
 import { AnalyticsRouteTracker } from "@/components/analytics/AnalyticsRouteTracker";
+import { DevBugTrackerDock } from "@/components/dev/DevBugTrackerDock";
 import { Suspense } from "react";
 
 const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://tijarah.vercel.app";
@@ -50,7 +51,12 @@ export default async function RootLayout({
     const messages = await getMessages({ locale: lang });
 
     return (
-        <html lang={lang} dir={isRTL(lang) ? "rtl" : "ltr"} suppressHydrationWarning>
+        <html
+            lang={lang}
+            dir={isRTL(lang) ? "rtl" : "ltr"}
+            data-scroll-behavior="smooth"
+            suppressHydrationWarning
+        >
             <body className="min-h-screen bg-canvas text-text-primary font-sans antialiased flex flex-col">
                 <Providers
                     lang={lang}
@@ -58,6 +64,7 @@ export default async function RootLayout({
                     themeProps={{ attribute: "class", defaultTheme: "light" }}
                 >
                     {children}
+                    {process.env.NODE_ENV === "development" && <DevBugTrackerDock />}
                 </Providers>
 
                 {/* ── Analytics Scripts (non-blocking) ── */}

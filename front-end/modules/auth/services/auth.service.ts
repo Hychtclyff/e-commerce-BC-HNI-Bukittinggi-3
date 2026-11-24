@@ -84,7 +84,7 @@ export const authService = {
         const response = await apiClient.post("/auth/sign-in-with-google", payload);
         const resData = response.data;
         const data = resData.data ?? resData;
-        const accessToken = data.token || data.appToken;
+        const accessToken = data.appToken || data.token || data.accessToken;
 
         if (accessToken) {
             useAuthStore.getState().setAuth({
@@ -140,5 +140,20 @@ export const authService = {
         }
 
         return resData;
+    },
+
+    forgotPassword: async (email: string) => {
+        const response = await apiClient.post("/auth/forgot-password", { email });
+        return response.data;
+    },
+
+    resetPassword: async (token: string, newPassword: string) => {
+        const response = await apiClient.post("/auth/reset-password", { token, newPassword });
+        return response.data;
+    },
+
+    changePassword: async (currentPassword: string, newPassword: string) => {
+        const response = await apiClient.post("/auth/change-password", { currentPassword, newPassword });
+        return response.data;
     },
 };

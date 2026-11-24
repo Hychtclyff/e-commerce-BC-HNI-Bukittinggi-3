@@ -8,6 +8,9 @@ import { TijarahButton } from "@/components/atom/tijarahButton";
 import { TijarahBadge } from "@/components/atom/tijarahBadge";
 import { TijarahInput } from "@/components/atom/tijarahInput";
 import { TijarahTextArea } from "@/components/atom/tijarahTextArea";
+import { TijarahSelect } from "@/components/atom/tijarahSelect";
+import { MediaUploader } from "@/modules/media/components/MediaUploader";
+import { storeApi } from "../../../api/store.api";
 import { TijarahGoogleDocEditor } from "@/components/rich-editor/TijarahGoogleDocEditor";
 import {
   productKnowledgeSchema,
@@ -42,6 +45,16 @@ export const ProductKnowledgeEditorView: React.FC<ProductKnowledgeEditorViewProp
   isLoading = false,
 }) => {
   const isEdit = !!knowledge;
+  const [selectedProductId, setSelectedProductId] = useState<string>("");
+  const [inventoryOptions, setInventoryOptions] = useState<Array<{ id: string; sku: string; name: string; category: string }>>([]);
+
+  useEffect(() => {
+    storeApi.getInventory().then((items) => {
+      setInventoryOptions(
+        (items || []).map((i) => ({ id: i.id, sku: i.sku, name: i.name, category: i.category }))
+      );
+    }).catch(() => {});
+  }, []);
 
   const {
     register,
@@ -73,6 +86,7 @@ export const ProductKnowledgeEditorView: React.FC<ProductKnowledgeEditorViewProp
 
   useEffect(() => {
     if (knowledge) {
+      setSelectedProductId((knowledge as any).productId || "");
       reset({
         sku: knowledge.sku,
         name: knowledge.name,
@@ -86,6 +100,7 @@ export const ProductKnowledgeEditorView: React.FC<ProductKnowledgeEditorViewProp
         imageUrl: knowledge.imageUrl || "",
       });
     } else {
+      setSelectedProductId("");
       reset({
         sku: "",
         name: "",
@@ -103,6 +118,7 @@ export const ProductKnowledgeEditorView: React.FC<ProductKnowledgeEditorViewProp
 
   const handleFormSubmit = async (data: ProductKnowledgeFormData) => {
     await onSubmit({
+      ...(selectedProductId ? { productId: selectedProductId } : {}),
       sku: data.sku,
       name: data.name,
       category: data.category,
@@ -113,7 +129,7 @@ export const ProductKnowledgeEditorView: React.FC<ProductKnowledgeEditorViewProp
       usageRules: data.usageRules,
       contraindications: data.contraindications,
       imageUrl: data.imageUrl,
-    });
+    } as any);
     onBack();
   };
 
@@ -234,54 +250,85 @@ export const ProductKnowledgeEditorView: React.FC<ProductKnowledgeEditorViewProp
               className="text-xs min-h-[80px] font-sans"
             />
           </TijarahCard>
+
+          {/* Komposisi Bahan Alami (dipindah satu kolom dengan Aturan Pakai & Peringatan #E37E3889) */}
+          <TijarahCard className="p-5 border border-border-subtle mac-glass mac-shadow rounded-2xl space-y-3">
+            <h3 className="text-xs font-black text-text-primary uppercase tracking-wider flex items-center gap-1.5 pb-2 border-b border-border-subtle">
+              <Award className="w-4 h-4 text-emerald-500" />
+              Komposisi Bahan Alami*
+            </h3>
+            <TijarahTextArea
+              placeholder="Virgin Coconut Oil 50%&#10;Oleum Olea Europaea (Zaitun) 30%&#10;Cengkeh & Kayu Manis 20%"
+              {...register("composition")}
+              className="text-xs min-h-[90px] font-sans"
+            />
+            {errors.composition && (
+              <span className="text-xs text-status-danger font-medium">
+                {errors.composition?.message as string}
+              </span>
+            )}
+          </TijarahCard>
         </div>
 
         {/* Kolom Kanan: Identitas & Metadata Produk (4/12) */}
         <div className="lg:col-span-4 space-y-5">
-          {/* Foto Produk & Preview */}
+          {/* Foto Produk & Upload (#B958CF69) */}
           <TijarahCard className="p-5 border border-border-subtle mac-glass mac-shadow rounded-2xl space-y-3.5">
             <h3 className="text-xs font-black text-text-primary uppercase tracking-wider flex items-center gap-1.5 pb-2 border-b border-border-subtle">
               <Sparkles className="w-4 h-4 text-primary-sage" />
               Visual Produk Herba
             </h3>
 
-            <div className="w-full aspect-square rounded-2xl border border-border-subtle overflow-hidden bg-canvas/60 flex items-center justify-center relative shadow-xs">
-              {watchedImageUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={watchedImageUrl}
-                  alt="Preview Produk"
-                  className="w-full h-full object-cover"
-                  onError={(e) => {
-                    (e.target as HTMLImageElement).src =
-                      "https://images.unsplash.com/photo-1608248597359-009770e6a88b?auto=format&fit=crop&w=400&q=80";
-                  }}
-                />
-              ) : (
-                <div className="flex flex-col items-center justify-center text-text-muted p-4 text-center">
-                  <ImageIcon className="w-8 h-8 mb-1.5 text-primary-sage/70" />
-                  <span className="text-xs font-semibold text-text-primary">Belum Ada Gambar</span>
-                  <span className="text-[10px] text-text-muted mt-0.5">Masukkan tautan URL di bawah</span>
-                </div>
-              )}
-            </div>
-
-            <div>
-              <label className="text-xs font-bold text-text-primary block mb-1">URL Gambar Produk</label>
-              <TijarahInput
-                placeholder="https://images.unsplash.com/... atau path CDN"
-                {...register("imageUrl")}
-                className="text-xs"
-              />
-            </div>
+            <MediaUploader
+              category="PRODUCT"
+              entityId={knowledge?.id}
+              accept="image"
+              value={watchedImageUrl || ""}
+              onChange={(url) => setValue("imageUrl", url, { shouldValidate: true })}
+              label="Unggah Foto Produk"
+              helperText="Tarik & lepas gambar produk (JPG/PNG/WEBP, maks 5 MB)"
+              allowManualUrl={false}
+              compact
+            />
           </TijarahCard>
 
-          {/* Informasi SKU & Legalitas */}
+          {/* Relasi 1-to-1 ke Produk Katalog (#AB5D21DA) */}
           <TijarahCard className="p-5 border border-border-subtle mac-glass mac-shadow rounded-2xl space-y-3.5">
             <h3 className="text-xs font-black text-text-primary uppercase tracking-wider flex items-center gap-1.5 pb-2 border-b border-border-subtle">
               <Layers className="w-4 h-4 text-primary-sage" />
-              Identitas &amp; Sertifikasi
+              Relasi Produk (1-to-1) &amp; Sertifikasi
             </h3>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-text-primary block">
+                Tautkan ke Produk Katalog (1-to-1)
+              </label>
+              <TijarahSelect
+                aria-label="Tautkan ke Produk Katalog"
+                selectedKey={selectedProductId || "NONE"}
+                onSelectionChange={(key) => {
+                  const val = String(key || "");
+                  if (!val || val === "NONE") {
+                    setSelectedProductId("");
+                    return;
+                  }
+                  setSelectedProductId(val);
+                  const prod = inventoryOptions.find((p) => p.id === val);
+                  if (prod && !isEdit) {
+                    setValue("sku", prod.sku, { shouldValidate: true });
+                    setValue("name", prod.name, { shouldValidate: true });
+                    setValue("category", prod.category || "Herbal", { shouldValidate: true });
+                  }
+                }}
+              >
+                <TijarahSelect.Item id="NONE">-- Belum Ditautkan --</TijarahSelect.Item>
+                {inventoryOptions.map((prod) => (
+                  <TijarahSelect.Item key={prod.id} id={prod.id}>
+                    {prod.sku} — {prod.name}
+                  </TijarahSelect.Item>
+                ))}
+              </TijarahSelect>
+            </div>
 
             <div>
               <label className="text-xs font-bold text-text-primary block mb-1">
@@ -349,24 +396,6 @@ export const ProductKnowledgeEditorView: React.FC<ProductKnowledgeEditorViewProp
                 />
               </div>
             </div>
-          </TijarahCard>
-
-          {/* Komposisi Bahan Alami */}
-          <TijarahCard className="p-5 border border-border-subtle mac-glass mac-shadow rounded-2xl space-y-3">
-            <h3 className="text-xs font-black text-text-primary uppercase tracking-wider flex items-center gap-1.5 pb-2 border-b border-border-subtle">
-              <Award className="w-4 h-4 text-emerald-500" />
-              Komposisi Bahan Alami*
-            </h3>
-            <TijarahTextArea
-              placeholder="Virgin Coconut Oil 50%&#10;Oleum Olea Europaea (Zaitun) 30%&#10;Cengkeh & Kayu Manis 20%"
-              {...register("composition")}
-              className="text-xs min-h-[90px] font-sans"
-            />
-            {errors.composition && (
-              <span className="text-xs text-status-danger font-medium">
-                {errors.composition?.message as string}
-              </span>
-            )}
           </TijarahCard>
         </div>
       </form>

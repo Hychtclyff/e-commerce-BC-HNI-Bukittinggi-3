@@ -43,7 +43,8 @@ export function useCheckoutApi() {
       queryClient.invalidateQueries({ queryKey: ["vouchers-list"] });
     },
     onError: (err: any) => {
-      handleApiError(err, t("toastProcessError"));
+      // Toast error ditangani tunggal oleh CheckoutContext agar tidak muncul toast ganda/rangkap 3
+      console.warn("processCheckout error:", err?.message);
     },
   });
 

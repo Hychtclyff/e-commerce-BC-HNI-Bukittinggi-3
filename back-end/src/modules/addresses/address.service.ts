@@ -17,8 +17,9 @@ export interface CreateAddressPayload {
 export interface UpdateAddressPayload extends Partial<CreateAddressPayload> {}
 
 export const addressService = {
-    async getAddresses(userId: string, lang: SupportedLanguage = 'id') {
+    async getAddresses(userId?: string, lang: SupportedLanguage = 'id') {
         try {
+            if (!userId) return [];
             return await db.orm.core_auth.Address
                 .where({ userId })
                 .all();

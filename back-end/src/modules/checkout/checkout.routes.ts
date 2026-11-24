@@ -8,6 +8,7 @@ import {
     shipOrderSchema,
 } from './checkout.schema';
 import { checkoutController } from './checkout.controller';
+import { requireAuth, requireNonProduction, requireStoreStaff } from '@/utils/authGuard';
 
 export async function checkoutRoutes(route: FastifyInstance) {
     const server = route.withTypeProvider<ZodTypeProvider>();
@@ -20,21 +21,16 @@ export async function checkoutRoutes(route: FastifyInstance) {
         checkoutController.calculateCheckout
     );
 
-    server.post(
-        '/process',
-        processCheckoutSchema,
-        checkoutController.processCheckout
-    );
+    server.register(async (authed) => {
+        authed.addHook('preHandler', requireAuth);
+        authed.post('/process', processCheckoutSchema, checkoutController.processCheckout);
+        authed.post('/orders/:id/regenerate-payment', checkoutController.regeneratePaymentCode);
 
-    server.post(
-        '/payments/mock-pay/:orderId',
-        checkoutController.simulateMockPayment
-    );
-
-    server.post(
-        '/orders/:id/regenerate-payment',
-        checkoutController.regeneratePaymentCode
-    );
+        authed.register(async (nonProd) => {
+            nonProd.addHook('preHandler', requireNonProduction);
+            nonProd.post('/payments/mock-pay/:orderId', checkoutController.simulateMockPayment);
+        });
+    });
 
     server.get(
         '/orders/:id/receipt',
@@ -43,21 +39,10 @@ export async function checkoutRoutes(route: FastifyInstance) {
 
     // --- OWNER / ADMIN APPROVAL ENDPOINTS ---
 
-    server.post(
-        '/admin/orders/:id/approve',
-        approveOrderSchema,
-        checkoutController.approveOrder
-    );
-
-    server.post(
-        '/admin/orders/:id/ship',
-        shipOrderSchema,
-        checkoutController.shipOrder
-    );
-
-    server.post(
-        '/admin/orders/:id/reject',
-        rejectOrderSchema,
-        checkoutController.rejectOrder
-    );
+    server.register(async (staff) => {
+        staff.addHook('preHandler', requireStoreStaff);
+        staff.post('/admin/orders/:id/approve', approveOrderSchema, checkoutController.approveOrder);
+        staff.post('/admin/orders/:id/ship', shipOrderSchema, checkoutController.shipOrder);
+        staff.post('/admin/orders/:id/reject', rejectOrderSchema, checkoutController.rejectOrder);
+    });
 }

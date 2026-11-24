@@ -2,16 +2,17 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import { useLocale } from "next-intl";
+import { Link } from "@/lib/i18n/navigation";
 import { apiClient } from "@/lib/axios/client";
 import { TijarahInput } from "@/components/atom/tijarahInput";
 import { TijarahButton } from "@/components/atom/tijarahButton";
-import { TijarahModal } from "@/components/atom/tijarahModal";
 import { TijarahBadge } from "@/components/atom/tijarahBadge";
 import { formatDate } from "@/utils/formatters";
-import { Newspaper, Search, Calendar, User } from "lucide-react";
+import { Newspaper, Search, Calendar, ArrowRight } from "lucide-react";
 
 interface NewsArticle {
   id: string;
+  slug?: string;
   title: string;
   summary?: string;
   content?: string;
@@ -29,13 +30,15 @@ export default function NewsPage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("ALL");
-  const [activeArticle, setActiveArticle] = useState<NewsArticle | null>(null);
 
   useEffect(() => {
     let active = true;
     setLoading(true);
     apiClient
-      .get<{ data: NewsArticle[] }>("/news?status=PUBLISHED")
+      .get<{ data: NewsArticle[] }>("/news?status=PUBLISHED", {
+        skipAuthRedirect: true,
+        skipGlobalToast: true,
+      } as any)
       .then((res) => {
         if (active && Array.isArray(res.data?.data)) {
           setArticles(res.data.data);
@@ -174,87 +177,56 @@ export default function NewsPage() {
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-            {filtered.map((item) => (
-              <article
-                key={item.id}
-                onClick={() => setActiveArticle(item)}
-                className="cursor-pointer group rounded-xl border border-border-subtle bg-surface overflow-hidden hover:border-primary-sage/40 transition-all flex flex-col justify-between"
-              >
-                <div>
-                  <div className="h-44 bg-canvas border-b border-border-subtle overflow-hidden flex items-center justify-center">
-                    {item.thumbnailUrl ? (
-                      <img
-                        src={item.thumbnailUrl}
-                        alt={item.title}
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                      />
-                    ) : (
-                      <Newspaper className="w-10 h-10 text-primary-sage/50" />
-                    )}
+            {filtered.map((item) => {
+              const articleHref = `/news/${item.id}`;
+              return (
+                <Link
+                  key={item.id}
+                  href={articleHref}
+                  className="group rounded-xl border border-border-subtle bg-surface overflow-hidden hover:border-primary-sage/60 hover:shadow-md transition-all flex flex-col justify-between"
+                >
+                  <div>
+                    <div className="h-48 bg-canvas border-b border-border-subtle overflow-hidden flex items-center justify-center relative">
+                      {item.thumbnailUrl ? (
+                        <img
+                          src={item.thumbnailUrl}
+                          alt={item.title}
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                        />
+                      ) : (
+                        <Newspaper className="w-10 h-10 text-primary-sage/50" />
+                      )}
+                    </div>
+                    <div className="p-5 space-y-2">
+                      <TijarahBadge tijarahVariant="primary" className="text-[10px] font-bold">
+                        {item.category || (isEn ? "Article" : "Artikel")}
+                      </TijarahBadge>
+                      <h2 className="text-base font-bold text-text-primary line-clamp-2 group-hover:text-primary-sage transition-colors">
+                        {isEn && (item as any).titleEn ? (item as any).titleEn : item.title}
+                      </h2>
+                      {(item.summary || (item as any).summaryEn) && (
+                        <p className="text-xs text-text-muted line-clamp-3 leading-relaxed">
+                          {isEn && (item as any).summaryEn ? (item as any).summaryEn : item.summary}
+                        </p>
+                      )}
+                    </div>
                   </div>
-                  <div className="p-5 space-y-2">
-                    <TijarahBadge tijarahVariant="primary" className="text-[10px] font-bold">
-                      {item.category || (isEn ? "Article" : "Artikel")}
-                    </TijarahBadge>
-                    <h2 className="text-base font-bold text-text-primary line-clamp-2 group-hover:text-primary-sage transition-colors">
-                      {item.title}
-                    </h2>
-                    {item.summary && (
-                      <p className="text-xs text-text-muted line-clamp-3 leading-relaxed">
-                        {item.summary}
-                      </p>
-                    )}
+                  <div className="px-5 py-3 border-t border-border-subtle flex items-center justify-between text-[11px] text-text-muted">
+                    <span className="flex items-center gap-1">
+                      <Calendar className="w-3 h-3" />
+                      {formatDate(item.publishedAt || item.createdAt || new Date().toISOString())}
+                    </span>
+                    <span className="font-semibold text-primary-sage inline-flex items-center gap-1 group-hover:translate-x-0.5 transition-transform">
+                      {isEn ? "Read Article" : "Baca Artikel"}
+                      <ArrowRight className="w-3.5 h-3.5" />
+                    </span>
                   </div>
-                </div>
-                <div className="px-5 py-3 border-t border-border-subtle flex items-center justify-between text-[11px] text-text-muted">
-                  <span className="flex items-center gap-1">
-                    <Calendar className="w-3 h-3" />
-                    {formatDate(item.publishedAt || item.createdAt || new Date().toISOString())}
-                  </span>
-                  <span className="font-semibold text-primary-sage">
-                    {isEn ? "Read Article" : "Baca Selengkapnya"} &rarr;
-                  </span>
-                </div>
-              </article>
-            ))}
+                </Link>
+              );
+            })}
           </div>
         )}
       </section>
-
-      <TijarahModal
-        isOpen={!!activeArticle}
-        onClose={() => setActiveArticle(null)}
-        title={activeArticle?.title || ""}
-        confirmText={isEn ? "Close" : "Tutup"}
-        confirmVariant="primary"
-        onConfirm={() => setActiveArticle(null)}
-        maxWidth="2xl"
-      >
-        {activeArticle && (
-          <div className="space-y-4 text-xs sm:text-sm text-text-primary">
-            <div className="flex flex-wrap items-center gap-3 text-xs text-text-muted">
-              <span className="flex items-center gap-1">
-                <User className="w-3.5 h-3.5" />
-                {activeArticle.authorName || "Admin BC 3"}
-              </span>
-              <span className="flex items-center gap-1">
-                <Calendar className="w-3.5 h-3.5" />
-                {formatDate(activeArticle.publishedAt || activeArticle.createdAt || new Date().toISOString())}
-              </span>
-            </div>
-            {activeArticle.thumbnailUrl && (
-              <img
-                src={activeArticle.thumbnailUrl}
-                alt={activeArticle.title}
-                className="w-full max-h-64 object-cover rounded-xl border border-border-subtle"
-              />
-            )}
-            <div className="whitespace-pre-line leading-relaxed text-text-secondary">
-              {activeArticle.content || activeArticle.summary || ""}
-            </div>
-          </div>
-        )}
-      </TijarahModal>
     </div>
   );
 }

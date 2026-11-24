@@ -21,7 +21,11 @@ export type StoreTabType =
   | "productKnowledge"
   | "news"
   | "media"
-  | "contacts";
+  | "contacts"
+  | "purchasing"
+  | "returns"
+  | "auditLogs"
+  | "settings";
 
 export type StorePaymentCategory =
   | "ALL"
@@ -74,7 +78,10 @@ export type StoreOrderStatus =
   | "COMPLETED"
   | "CANCELLED"
   | "PENDING_PAYMENT"
-  | "REJECTED";
+  | "REJECTED"
+  | "RETURN_REQUESTED"
+  | "RETURN_APPROVED"
+  | "REFUNDED";
 
 export interface StoreOrderItem {
   id: string;
@@ -102,7 +109,7 @@ export interface StoreOrder {
   totalPoints?: number;
   status: StoreOrderStatus;
   paymentMethod: string;
-  paymentStatus?: "UNPAID" | "PAID" | "REFUNDED" | "ON_CREDIT";
+  paymentStatus?: "UNPAID" | "PAID" | "REFUNDED" | "REFUND_PENDING" | "ON_CREDIT";
   shippingMethod?: string;
   fulfillmentType?: "PICKUP" | "DELIVERY";
   shippingAddress?: string;
@@ -110,6 +117,15 @@ export interface StoreOrder {
   courierName?: string | null;
   notes?: string | null;
   rejectionReason?: string | null;
+  cancellationReason?: string | null;
+  refundBankName?: string | null;
+  refundAccountNumber?: string | null;
+  refundAccountName?: string | null;
+  refundProofUrl?: string | null;
+  printStatus?: "NOT_PRINTED" | "QUEUED" | "PRINTED";
+  printedAt?: string | null;
+  refundConfirmedByUser?: boolean;
+  refundConfirmedAt?: string | null;
   hsisStatus?: "PENDING" | "SYNCED" | "FAILED";
   hsisTrxNumber?: string | null;
   hsisSyncedAt?: string | null;

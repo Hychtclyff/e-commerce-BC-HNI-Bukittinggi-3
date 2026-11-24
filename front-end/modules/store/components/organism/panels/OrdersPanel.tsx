@@ -17,6 +17,7 @@ import { TijarahInput } from "@/components/atom/tijarahInput";
 import { TijarahSelect } from "@/components/atom/tijarahSelect";
 import { TijarahDateRangePicker } from "@/components/atom/tijarahDateRangePicker";
 import { TijarahTabs } from "@/components/atom/tijarahTabs";
+import { MediaUploader } from "@/modules/media/components/MediaUploader";
 import { formatCurrency, formatDate } from "@/utils/formatters";
 import { showToast } from "@/utils/toast";
 import { storeApi } from "@/modules/store/api/store.api";
@@ -31,6 +32,7 @@ import {
   Clock,
   Layers,
   ShieldAlert,
+  Printer,
 } from "lucide-react";
 
 export interface IOrdersPanelProps {
@@ -40,8 +42,9 @@ export interface IOrdersPanelProps {
   onOpenRejectModal: (order: StoreOrder) => void;
   onOpenReceiptModal: (order: StoreOrder) => void;
   onConfirmReceived?: (orderId: string) => void;
-  onCompleteOrder?: (orderId: string) => void;
+  onCompleteOrder?: (orderId: string, cashReceived?: number) => void;
   onReadyForPickup?: (orderId: string) => void;
+  onConfirmRefund?: (orderId: string, payload?: { refundProofUrl?: string; adminNotes?: string }) => Promise<any>;
   onNavigateToCashier?: () => void;
   onNavigateToEsignature?: () => void;
   esignatures?: StoreEsignature[];
@@ -59,6 +62,7 @@ export const OrdersPanel: React.FC<IOrdersPanelProps> = ({
   onConfirmReceived,
   onCompleteOrder,
   onReadyForPickup,
+  onConfirmRefund,
   onNavigateToCashier,
   onNavigateToEsignature,
   esignatures,
@@ -83,6 +87,39 @@ export const OrdersPanel: React.FC<IOrdersPanelProps> = ({
     });
   }, [esignatures, authUser]);
   const [searchTerm, setSearchTerm] = useState("");
+  const [cashCompleteOrder, setCashCompleteOrder] = useState<StoreOrder | null>(null);
+  const [cashReceivedInput, setCashReceivedInput] = useState<string>("");
+  const [refundConfirmOrder, setRefundConfirmOrder] = useState<StoreOrder | null>(null);
+  const [refundNotesInput, setRefundNotesInput] = useState<string>("");
+  const [refundProofInput, setRefundProofInput] = useState<string>("");
+  const [isConfirmingRefund, setIsConfirmingRefund] = useState(false);
+
+  const handleRequestComplete = (orderId: string) => {
+    const found = orders.find((o) => o.id === orderId);
+    if (found && String(found.paymentMethod || "").toUpperCase() === "CASH_STORE") {
+      setCashCompleteOrder(found);
+      setCashReceivedInput(String(found.totalAmount || 0));
+      return;
+    }
+    onCompleteOrder?.(orderId);
+  };
+
+  const handleConfirmCashComplete = () => {
+    if (!cashCompleteOrder) return;
+    const cashNum = Number(cashReceivedInput);
+    if (!Number.isFinite(cashNum) || cashNum < Number(cashCompleteOrder.totalAmount || 0)) {
+      showToast.error(
+        isEn ? "Insufficient Cash" : "Nominal Tunai Kurang",
+        isEn
+          ? `Cash received must be at least ${formatCurrency(cashCompleteOrder.totalAmount)}.`
+          : `Nominal uang diterima minimal ${formatCurrency(cashCompleteOrder.totalAmount)}.`
+      );
+      return;
+    }
+    onCompleteOrder?.(cashCompleteOrder.id, cashNum);
+    setCashCompleteOrder(null);
+    setCashReceivedInput("");
+  };
   const [paymentFilter, setPaymentFilter] =
     useState<StorePaymentCategory>("ALL");
   const [methodFilter, setMethodFilter] = useState<string>("ALL");
@@ -139,6 +176,15 @@ export const OrdersPanel: React.FC<IOrdersPanelProps> = ({
       count: erpDeliveryOrders.filter((o) => o.status === "COMPLETED").length,
     },
     {
+      id: "PRINT_QUEUE",
+      label: "Antrian Print",
+      count: erpDeliveryOrders.filter(
+        (o) =>
+          (o.status === "PAID" || o.status === "PROCESSING" || o.status === "READY_FOR_PICKUP") &&
+          o.printStatus !== "PRINTED"
+      ).length,
+    },
+    {
       id: "REJECTED",
       label: t("tabCancelledOrRejected"),
       count: erpDeliveryOrders.filter(
@@ -171,6 +217,12 @@ export const OrdersPanel: React.FC<IOrdersPanelProps> = ({
             order.status !== "PAID" &&
             order.status !== "PROCESSING" &&
             order.status !== "READY_FOR_PICKUP"
+          )
+            return false;
+        } else if (statusFilter === "PRINT_QUEUE") {
+          if (
+            (order.status !== "PAID" && order.status !== "PROCESSING" && order.status !== "READY_FOR_PICKUP") ||
+            order.printStatus === "PRINTED"
           )
             return false;
         } else if (statusFilter === "REJECTED") {
@@ -669,11 +721,59 @@ export const OrdersPanel: React.FC<IOrdersPanelProps> = ({
                           +{order.totalPoints} TP HNI
                         </span>
                       ) : null}
+                      {(order.paymentStatus === "REFUND_PENDING" || order.paymentStatus === "REFUNDED") && (
+                        <div className="mt-1.5 space-y-0.5 rounded-lg border border-border-subtle bg-canvas px-2 py-1 text-[10px]">
+                          <span
+                            className={`font-bold block ${
+                              order.paymentStatus === "REFUNDED"
+                                ? "text-emerald-600"
+                                : "text-amber-600"
+                            }`}
+                          >
+                            {order.paymentStatus === "REFUNDED"
+                              ? "Dana Sudah Dikembalikan"
+                              : "Menunggu Pengembalian Dana"}
+                          </span>
+                          {order.refundBankName && (
+                            <span className="text-text-muted block">
+                              {order.refundBankName} • {order.refundAccountNumber} ({order.refundAccountName})
+                            </span>
+                          )}
+                          {order.cancellationReason && (
+                            <span className="text-text-muted italic block truncate max-w-[190px]">
+                              Alasan: {order.cancellationReason}
+                            </span>
+                          )}
+                        </div>
+                      )}
                     </td>
 
                     {/* Badge Status */}
-                    <td className="py-3.5 px-4">
+                    <td className="py-3.5 px-4 space-y-1.5">
                       <OrderStatusBadge status={order.status} />
+                      {(order.status === "PAID" || order.status === "PROCESSING" || order.status === "READY_FOR_PICKUP") && (
+                        <button
+                          type="button"
+                          onClick={() => onOpenReceiptModal(order)}
+                          className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md border cursor-pointer ${
+                            order.printStatus === "PRINTED"
+                              ? "bg-emerald-500/10 text-emerald-700 border-emerald-500/25"
+                              : order.printStatus === "QUEUED"
+                                ? "bg-amber-500/10 text-amber-700 border-amber-500/25"
+                                : "bg-canvas text-text-muted border-border-subtle"
+                          }`}
+                          title="Klik untuk cetak resi pesanan ini"
+                        >
+                          <Printer className="w-3 h-3" />
+                          <span>
+                            {order.printStatus === "PRINTED"
+                              ? "Sudah Diprint"
+                              : order.printStatus === "QUEUED"
+                                ? "Antrian Print"
+                                : "Belum Diprint"}
+                          </span>
+                        </button>
+                      )}
                     </td>
 
                     {/* Tombol Aksi & Alur */}
@@ -682,9 +782,18 @@ export const OrdersPanel: React.FC<IOrdersPanelProps> = ({
                         order={order}
                         onShip={onOpenShipModal}
                         onConfirmReceived={onConfirmReceived}
-                        onComplete={onCompleteOrder}
+                        onComplete={handleRequestComplete}
                         onReadyForPickup={onReadyForPickup}
                         onReject={onOpenRejectModal}
+                        onConfirmRefund={
+                          onConfirmRefund
+                            ? (ord) => {
+                                setRefundConfirmOrder(ord);
+                                setRefundNotesInput("");
+                                setRefundProofInput("");
+                              }
+                            : undefined
+                        }
                         onPrint={onOpenReceiptModal}
                         onViewDetail={(ord) => setSelectedOrderForDetail(ord)}
                         isAdvancing={isAdvancing}
@@ -707,10 +816,153 @@ export const OrdersPanel: React.FC<IOrdersPanelProps> = ({
         onPrintReceipt={(ord) => onOpenReceiptModal(ord)}
         onShip={(ord) => onOpenShipModal(ord)}
         onConfirmReceived={onConfirmReceived}
-        onComplete={onCompleteOrder}
+        onComplete={handleRequestComplete}
         onReadyForPickup={onReadyForPickup}
         isActionLoading={isAdvancing || isReadyingForPickup}
       />
+
+      {/* Modal Pembayaran Tunai di Toko (#12 CASH_STORE) */}
+      {cashCompleteOrder && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-md rounded-2xl border border-border-subtle bg-surface p-6 shadow-xl space-y-4">
+            <div>
+              <h3 className="text-sm font-bold text-text-primary">
+                {isEn ? "Confirm Store Cash Payment" : "Konfirmasi Pembayaran Tunai di Toko"}
+              </h3>
+              <p className="text-xs text-text-muted mt-0.5">
+                Order #{cashCompleteOrder.orderNumber} • Total Tagihan:{" "}
+                <strong className="text-text-primary">{formatCurrency(cashCompleteOrder.totalAmount)}</strong>
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <TijarahInput
+                type="number"
+                label={isEn ? "Cash Received (Rp)*" : "Uang Tunai Diterima (Rp)*"}
+                value={cashReceivedInput}
+                onChange={(e) => setCashReceivedInput(e.target.value)}
+                className="text-sm font-bold tabular-nums"
+              />
+              {Number(cashReceivedInput) >= Number(cashCompleteOrder.totalAmount || 0) && (
+                <div className="flex items-center justify-between text-xs px-3 py-2 rounded-lg bg-canvas border border-border-subtle">
+                  <span className="text-text-muted">{isEn ? "Change" : "Kembalian"}</span>
+                  <span className="font-bold text-primary-sage tabular-nums">
+                    {formatCurrency(Number(cashReceivedInput) - Number(cashCompleteOrder.totalAmount || 0))}
+                  </span>
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <TijarahButton
+                type="button"
+                size="sm"
+                tijarahVariant="outline"
+                onClick={() => {
+                  setCashCompleteOrder(null);
+                  setCashReceivedInput("");
+                }}
+              >
+                {isEn ? "Cancel" : "Batal"}
+              </TijarahButton>
+              <TijarahButton
+                type="button"
+                size="sm"
+                tijarahVariant="primary"
+                isLoading={isAdvancing}
+                onClick={handleConfirmCashComplete}
+              >
+                {isEn ? "Confirm & Complete" : "Konfirmasi Lunas & Selesaikan"}
+              </TijarahButton>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Konfirmasi Pengembalian Dana Cancel/Reject (#CB600BBE) */}
+      {refundConfirmOrder && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-md rounded-2xl border border-border-subtle bg-surface p-6 shadow-xl space-y-4">
+            <div>
+              <h3 className="text-sm font-bold text-text-primary">
+                Konfirmasi Pengembalian Dana (Refund)
+              </h3>
+              <p className="text-xs text-text-muted mt-0.5">
+                Order #{refundConfirmOrder.orderNumber} • Nominal:{" "}
+                <strong className="text-text-primary">
+                  {formatCurrency(refundConfirmOrder.totalAmount)}
+                </strong>
+              </p>
+            </div>
+
+            {refundConfirmOrder.refundBankName && (
+              <div className="rounded-xl border border-border-subtle bg-canvas p-3 text-xs space-y-1">
+                <p className="font-bold text-text-primary">Rekening Tujuan Pembeli:</p>
+                <p className="text-text-muted">
+                  {refundConfirmOrder.refundBankName} —{" "}
+                  <strong className="font-mono text-text-primary">
+                    {refundConfirmOrder.refundAccountNumber}
+                  </strong>
+                </p>
+                <p className="text-text-muted">a.n. {refundConfirmOrder.refundAccountName}</p>
+              </div>
+            )}
+
+            <MediaUploader
+              category="RECEIPT"
+              entityId={refundConfirmOrder.id}
+              accept="image"
+              value={refundProofInput}
+              onChange={(url) => setRefundProofInput(url)}
+              label="Upload Bukti Transfer Refund (Gambar)"
+              helperText="Unggah foto/screenshot bukti transfer pengembalian dana (maks 5 MB)"
+              allowManualUrl={false}
+              compact
+            />
+
+            <TijarahInput
+              label="Catatan Admin (Opsional)"
+              placeholder="Mis: Dana sudah ditransfer via BCA..."
+              value={refundNotesInput}
+              onChange={(e) => setRefundNotesInput(e.target.value)}
+              className="text-xs"
+            />
+
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <TijarahButton
+                type="button"
+                size="sm"
+                tijarahVariant="outline"
+                onClick={() => setRefundConfirmOrder(null)}
+                isDisabled={isConfirmingRefund}
+              >
+                Batal
+              </TijarahButton>
+              <TijarahButton
+                type="button"
+                size="sm"
+                tijarahVariant="primary"
+                isLoading={isConfirmingRefund}
+                onClick={async () => {
+                  if (!onConfirmRefund || !refundConfirmOrder) return;
+                  setIsConfirmingRefund(true);
+                  try {
+                    await onConfirmRefund(refundConfirmOrder.id, {
+                      refundProofUrl: refundProofInput.trim() || undefined,
+                      adminNotes: refundNotesInput.trim() || undefined,
+                    });
+                    setRefundConfirmOrder(null);
+                  } finally {
+                    setIsConfirmingRefund(false);
+                  }
+                }}
+              >
+                Tandai Dana Dikembalikan (REFUNDED)
+              </TijarahButton>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

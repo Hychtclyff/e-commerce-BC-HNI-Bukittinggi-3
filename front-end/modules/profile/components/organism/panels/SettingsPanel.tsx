@@ -7,6 +7,7 @@ import { TijarahCard } from "@/components/atom/tijarahCard";
 import { ChangePasswordForm } from "../form/changePasswordForm";
 import { useTranslations } from "next-intl";
 import { Globe, Sun, Moon, KeyRound } from "lucide-react";
+import { authService } from "@/modules/auth/services/auth.service";
 
 export function SettingsPanel() {
   const { theme, setTheme } = useTheme();
@@ -101,7 +102,11 @@ export function SettingsPanel() {
         </h3>
         <p className="text-xs text-text-muted mb-4">{tPwd("subtitle")}</p>
 
-        <ChangePasswordForm />
+        <ChangePasswordForm
+          onSubmit={async (data) => {
+            await authService.changePassword(data.oldPassword, data.newPassword);
+          }}
+        />
       </TijarahCard>
     </div>
   );

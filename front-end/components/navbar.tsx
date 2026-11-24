@@ -14,6 +14,7 @@ import { ThemeSwitch } from "@/components/theme-switch";
 import { SearchIcon, Logo } from "@/components/icons";
 import { LanguageSwitch } from "./language-switch";
 import { useAuthStore } from "@/modules/auth/services/auth.store";
+import { hasErpAccess } from "@/lib/auth/erpAccess";
 import { authService } from "@/modules/auth/services/auth.service";
 import { useCart } from "@/modules/shop/hooks/useCart";
 import { CartDrawerSheet } from "@/modules/shop/components/organisms/CartDrawerSheet";
@@ -325,13 +326,15 @@ export const Navbar = () => {
                                             <User className="w-4 h-4 text-text-muted" /> {t("profile")}
                                         </Link>
 
-                                        <Link
-                                            href="/store"
-                                            onClick={() => setIsProfileOpen(false)}
-                                            className="flex items-center gap-2 px-3 py-2 rounded-xl text-text-primary hover:bg-canvas transition-colors font-medium"
-                                        >
-                                            <Store className="w-4 h-4 text-text-muted" /> {t("store") || "Toko / Vendor Dashboard"}
-                                        </Link>
+                                        {hasErpAccess(user) && (
+                                            <Link
+                                                href="/store"
+                                                onClick={() => setIsProfileOpen(false)}
+                                                className="flex items-center gap-2 px-3 py-2 rounded-xl text-text-primary hover:bg-canvas transition-colors font-medium"
+                                            >
+                                                <Store className="w-4 h-4 text-text-muted" /> {t("store") || "Toko / Vendor Dashboard"}
+                                            </Link>
+                                        )}
 
                                         <div className="h-px bg-border-subtle my-1" />
 

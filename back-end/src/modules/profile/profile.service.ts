@@ -1,6 +1,7 @@
 import { db, pool } from "@/prisma/db";
 import { AppError } from "@/utils/AppError";
 import { SupportedLanguage, t } from "@/i18n";
+import { getUserRbacAccess } from "@/utils/rbacSeeder";
 import { HNIProfileData, SearchHNIProfilePayload } from "./profile.schema";
 import { axiosClient, getRuntimeHsisAuth } from "@/config/axios";
 import { storeService } from "../store/store.service";
@@ -30,9 +31,14 @@ export const profileService = {
                 .first();
 
             const { passwordHash, ...userWithoutPassword } = user;
+            const rbac = await getUserRbacAccess(userId);
 
             return {
-                user: userWithoutPassword,
+                user: {
+                    ...userWithoutPassword,
+                    roles: rbac.roles,
+                    permissions: rbac.permissions,
+                },
                 hniProfile: user.hniProfile || null,
                 addresses: user.addresses || [],
                 creditProfile: creditProfile || null,

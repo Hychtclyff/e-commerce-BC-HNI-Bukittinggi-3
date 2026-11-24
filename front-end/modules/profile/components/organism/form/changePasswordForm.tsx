@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { useForm, Controller, Form } from "react-hook-form";
+import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useTranslations } from "next-intl";
 import { Lock, ShieldCheck } from "lucide-react";
@@ -58,9 +58,8 @@ export const ChangePasswordForm: React.FC<ChangePasswordFormProps> = ({
     };
 
     return (
-        <Form
-            control={control}
-            onSubmit={() => handleSubmit(handleFormSubmit)}
+        <form
+            onSubmit={handleSubmit(handleFormSubmit)}
             className="flex flex-col gap-4"
         >
             {successMsg && (
@@ -150,6 +149,6 @@ export const ChangePasswordForm: React.FC<ChangePasswordFormProps> = ({
                     <span>{t("submitBtn")}</span>
                 </TijarahButton>
             </div>
-        </Form>
+        </form>
     );
 };

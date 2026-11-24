@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, Suspense } from "react";
+import React, { useState, useEffect, Suspense } from "react";
 import { useTranslations } from "next-intl";
 import { Link } from "@/lib/i18n/navigation";
 import { useRouter } from "next/navigation";
@@ -17,12 +17,28 @@ export const LoginPage = () => {
     const [serverError, setServerError] = useState<string | null>(null);
     const [serverHint, setServerHint] = useState<string | null>(null);
 
+    useEffect(() => {
+        if (typeof window !== "undefined") {
+            const params = new URLSearchParams(window.location.search);
+            if (params.get("expired") === "1") {
+                setServerHint("Sesi Anda telah berakhir. Silakan login kembali untuk melanjutkan.");
+            }
+        }
+    }, []);
+
     const { mutate: login, isPending } = useMutation({
         mutationKey: ["login"],
         mutationFn: (data: LoginFormData) => authService.login(data),
         onSuccess: () => {
             setServerError(null);
             setServerHint(null);
+            if (typeof window !== "undefined") {
+                const nextUrl = new URLSearchParams(window.location.search).get("next");
+                if (nextUrl && nextUrl.startsWith("/")) {
+                    router.push(nextUrl);
+                    return;
+                }
+            }
             router.push("/");
         },
         onError: (error: any, variables: LoginFormData) => {

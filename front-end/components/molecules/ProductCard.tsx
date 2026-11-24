@@ -1,15 +1,18 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
 import Image from "next/image";
 import { useTranslations } from "next-intl";
-import { ShoppingBag, Plus, Minus, Trash2 } from "lucide-react";
+import { ShoppingBag, Plus, Minus, Trash2, Heart } from "lucide-react";
 import { TijarahCard } from "@/components/atom/tijarahCard";
 import { TijarahButton } from "@/components/atom/tijarahButton";
 import { TijarahBadge } from "@/components/atom/tijarahBadge";
 import { formatCurrency } from "@/utils/formatters";
 import { useCartStore } from "@/modules/shop/store/cart.store";
 import { ShopProduct } from "@/modules/shop/types/shop.types";
+import { shopApi } from "@/modules/shop/api/shop.api";
+import { useAuthStore } from "@/modules/auth/services/auth.store";
+import { showToast } from "@/utils/toast";
 import { Link } from "@/lib/i18n/navigation";
 
 export interface ProductCardProps {
@@ -139,14 +142,15 @@ export const ProductCard: React.FC<ProductCardProps> = ({
           )}
         </div>
 
-        {/* Floating Badge Poin Kanan Atas */}
-        {!isFraction && effectiveIsAgent && tpPoints > 0 && (
-          <div className="absolute top-3 right-3 pointer-events-none">
-            <span className="flex items-center gap-1 text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-md bg-accent-gold text-white shadow-xs">
+        {/* Floating Badge Poin & Wishlist Kanan Atas */}
+        <div className="absolute top-3 right-3 flex items-center gap-1.5">
+          {!isFraction && effectiveIsAgent && tpPoints > 0 && (
+            <span className="pointer-events-none flex items-center gap-1 text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-md bg-accent-gold text-white shadow-xs">
               {tpPoints} {t("tpPointsLabel")}
             </span>
-          </div>
-        )}
+          )}
+          <WishlistHeartButton productId={id} productName={name} />
+        </div>
       </Link>
 
       {/* 2. Area Konten Teks & Tipografi (Sesuai Referensi) */}
@@ -261,4 +265,48 @@ export const ProductCard: React.FC<ProductCardProps> = ({
     </div>
   );
 };
+
+function WishlistHeartButton({ productId, productName }: { productId: string; productName: string }) {
+  const user = useAuthStore((s) => s.user);
+  const [wishlisted, setWishlisted] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  const handleToggle = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!user?.id) {
+      showToast.error("Login Diperlukan", "Silakan masuk untuk menyimpan produk ke wishlist.");
+      return;
+    }
+    setLoading(true);
+    try {
+      const res = await shopApi.toggleWishlist(productId);
+      setWishlisted(Boolean(res.wishlisted));
+      showToast.success(
+        res.wishlisted ? "Disimpan ke Wishlist" : "Dihapus dari Wishlist",
+        productName
+      );
+    } catch {
+      // handled
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <button
+      type="button"
+      onClick={handleToggle}
+      disabled={loading}
+      aria-label="Toggle Wishlist"
+      className={`w-7 h-7 rounded-full flex items-center justify-center backdrop-blur-md border transition-colors cursor-pointer ${
+        wishlisted
+          ? "bg-rose-500 border-rose-500 text-white"
+          : "bg-surface/90 border-border-subtle/60 text-text-muted hover:text-rose-500"
+      }`}
+    >
+      <Heart className={`w-3.5 h-3.5 ${wishlisted ? "fill-white" : ""}`} />
+    </button>
+  );
+}
 export default ProductCard;

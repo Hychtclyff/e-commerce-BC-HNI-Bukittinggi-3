@@ -154,4 +154,61 @@ export const ordersController = {
             throw error;
         }
     },
+
+    async getUserReturns(req: FastifyRequest, reply: FastifyReply) {
+        const userId = (req as any).user?.id;
+        if (!userId) return responseUtil.unauthorized(reply, "Autentikasi diperlukan.");
+        try {
+            const { orderReturnService } = await import("./orderReturn.service");
+            const data = await orderReturnService.getUserReturns(userId);
+            return responseUtil.success({ reply, message: "Daftar retur Anda dimuat.", data });
+        } catch (error: any) {
+            if (error instanceof AppError) return responseUtil.appError(reply, error);
+            throw error;
+        }
+    },
+
+    async getOrderReturn(req: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) {
+        const userId = (req as any).user?.id;
+        if (!userId) return responseUtil.unauthorized(reply, "Autentikasi diperlukan.");
+        try {
+            const { orderReturnService } = await import("./orderReturn.service");
+            const data = await orderReturnService.getOrderReturn(req.params.id, userId);
+            return responseUtil.success({ reply, message: "Status retur berhasil dimuat.", data });
+        } catch (error: any) {
+            if (error instanceof AppError) return responseUtil.appError(reply, error);
+            throw error;
+        }
+    },
+
+    async createOrderReturn(
+        req: FastifyRequest<{ Params: { id: string }; Body: { reason: string; description: string; evidenceUrl?: string } }>,
+        reply: FastifyReply
+    ) {
+        const userId = (req as any).user?.id;
+        if (!userId) return responseUtil.unauthorized(reply, "Autentikasi diperlukan.");
+        try {
+            const { orderReturnService } = await import("./orderReturn.service");
+            const data = await orderReturnService.createOrderReturn(req.params.id, userId, req.body);
+            return responseUtil.created({ reply, message: "Pengajuan retur berhasil dikirim.", data });
+        } catch (error: any) {
+            if (error instanceof AppError) return responseUtil.appError(reply, error);
+            throw error;
+        }
+    },
+
+    async confirmRefundReceived(
+        req: FastifyRequest<{ Params: { id: string } }>,
+        reply: FastifyReply
+    ) {
+        const userId = (req as any).user?.id;
+        if (!userId) return responseUtil.unauthorized(reply, "Autentikasi diperlukan.");
+        try {
+            const data = await ordersService.confirmRefundReceived(req.params.id, userId);
+            return responseUtil.success({ reply, message: "Penerimaan dana refund berhasil dikonfirmasi.", data });
+        } catch (error: any) {
+            if (error instanceof AppError) return responseUtil.appError(reply, error);
+            throw error;
+        }
+    },
 };

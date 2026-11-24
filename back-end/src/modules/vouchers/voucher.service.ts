@@ -196,10 +196,12 @@ export const voucherService = {
                 }
             }
 
-            // 2. Day of Week Window
+            // 2. Day of Week Window (gunakan WIB UTC+7 agar selaras dengan jadwal toko Indonesia)
             if (Array.isArray(rawConditions.allowedDaysOfWeek) && rawConditions.allowedDaysOfWeek.length > 0) {
-                const todayDay = new Date().getDay();
-                if (!rawConditions.allowedDaysOfWeek.includes(todayDay)) {
+                const allowedDays = rawConditions.allowedDaysOfWeek.map((d) => Number(d)).filter((d) => !Number.isNaN(d));
+                const wibNow = new Date(Date.now() + 7 * 60 * 60 * 1000);
+                const todayDay = wibNow.getUTCDay();
+                if (allowedDays.length > 0 && !allowedDays.includes(todayDay)) {
                     throw new AppError(t('vouchers.day_of_week_not_allowed', {}, lang), 400);
                 }
             }

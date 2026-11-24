@@ -1,11 +1,36 @@
 import { FastifyRequest, FastifyReply } from 'fastify';
 import { profileService } from './profile.service';
+import { productEngagementService } from '../products/productEngagement.service';
 import { responseUtil } from '@/utils/response';
 import { AppError } from '@/utils/AppError';
 import { getLanguageFromRequest, t } from '@/i18n';
 import { GetProfileParams, SearchHNIProfileQuery, UpdateHniProfileBody, UpdateProfileBody } from './profile.schema';
 
 export const profileController = {
+    getWishlist: async (req: FastifyRequest, res: FastifyReply) => {
+        const userId = (req as any).user?.id;
+        if (!userId) return responseUtil.unauthorized(res, 'Autentikasi diperlukan.');
+        try {
+            const data = await productEngagementService.getWishlist(userId);
+            return responseUtil.success({ reply: res, message: 'Daftar wishlist berhasil dimuat.', data });
+        } catch (error: any) {
+            if (error instanceof AppError) return responseUtil.appError(res, error);
+            throw error;
+        }
+    },
+
+    toggleWishlist: async (req: FastifyRequest<{ Body: { productId: string } }>, res: FastifyReply) => {
+        const userId = (req as any).user?.id;
+        if (!userId) return responseUtil.unauthorized(res, 'Autentikasi diperlukan.');
+        try {
+            const data = await productEngagementService.toggleWishlist(userId, req.body.productId);
+            return responseUtil.success({ reply: res, message: 'Wishlist diperbarui.', data });
+        } catch (error: any) {
+            if (error instanceof AppError) return responseUtil.appError(res, error);
+            throw error;
+        }
+    },
+
     getProfile: async (req: FastifyRequest<{ Params: GetProfileParams }>, res: FastifyReply) => {
         const lang = getLanguageFromRequest(req);
 

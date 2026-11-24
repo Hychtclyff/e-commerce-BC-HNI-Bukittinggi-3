@@ -67,7 +67,13 @@ export const checkoutService = {
         .include("hniProfile")
         .first();
 
-      const isAgent = Boolean(user?.hniProfile && user.hniProfile.isVerified);
+      const isAgent = Boolean(
+        (user?.hniProfile && user.hniProfile.isVerified) ||
+        (user?.hniProfile && Boolean(user.hniProfile.hniMemberId)) ||
+        ["AGENT", "AGEN", "MEMBER", "STOKIS", "DISTRIBUTOR", "LEADER"].includes(
+          String(user?.userType || "").toUpperCase()
+        )
+      );
 
       let subtotal = 0;
       let totalTpPoints = 0;
@@ -190,7 +196,13 @@ export const checkoutService = {
         throw new AppError(t("profile.user_not_found", {}, lang), 404);
       }
 
-      const isAgent = Boolean(user.hniProfile && user.hniProfile.isVerified);
+      const isAgent = Boolean(
+        (user.hniProfile && user.hniProfile.isVerified) ||
+        (user.hniProfile && Boolean(user.hniProfile.hniMemberId)) ||
+        ["AGENT", "AGEN", "MEMBER", "STOKIS", "DISTRIBUTOR", "LEADER"].includes(
+          String(user.userType || "").toUpperCase()
+        )
+      );
 
       // Validasi & Hitung item
       let subtotal = 0;
@@ -674,6 +686,14 @@ export const checkoutService = {
           category: "ORDER_STATUS",
           referenceId: order.id,
         });
+      }
+
+      // Kirim email resi / konfirmasi pesanan (menggunakan template ERP, aman di dev)
+      try {
+        const { paymentService } = await import("../payments/payment.service");
+        await paymentService.generateReceipt(order.id, lang);
+      } catch (mailErr: any) {
+        console.warn("[checkout] Receipt email dispatch skipped:", mailErr?.message);
       }
 
       return this.getOrderReceipt(order.id, lang);

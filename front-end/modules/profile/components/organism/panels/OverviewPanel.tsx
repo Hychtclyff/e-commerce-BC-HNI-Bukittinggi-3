@@ -1,13 +1,16 @@
 "use client";
 
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { useTranslations, useLocale } from "next-intl";
+import { Link } from "@/lib/i18n/navigation";
 import { UserProfileData, HniProfileData, B2BCreditProfileData, AddressData } from "../../../types/profile.types";
 import { HniAgentCard } from "../../molecules/HniAgentCard";
 import { AddressCard } from "../../molecules/AddressCard";
 import { TijarahCard } from "@/components/atom/tijarahCard";
 import { TijarahButton } from "@/components/atom/tijarahButton";
-import { CreditCard, MapPin, ArrowRight, ShieldAlert } from "lucide-react";
+import { CreditCard, MapPin, ArrowRight, ShieldAlert, Heart } from "lucide-react";
+import { shopApi } from "@/modules/shop/api/shop.api";
+import { formatCurrency } from "@/utils/formatters";
 
 interface OverviewPanelProps {
   user: UserProfileData;
@@ -27,6 +30,13 @@ export function OverviewPanel({
   const t = useTranslations();
   const locale = useLocale();
   const numLocale = locale === "en" ? "en-US" : "id-ID";
+  const [wishlist, setWishlist] = useState<any[]>([]);
+
+  useEffect(() => {
+    shopApi.getWishlist().then((items) => {
+      if (Array.isArray(items)) setWishlist(items);
+    }).catch(() => {});
+  }, []);
 
   return (
     <div className="flex flex-col gap-6">
@@ -51,7 +61,7 @@ export function OverviewPanel({
 
       {/* 2. Quick Overview Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* Plafon Kasbon Card */}
+        {/* Plafon Kasbon Card (Temporarily disabled per #22)
         <TijarahCard tijarahVariant="default" className="p-4 sm:p-6 border border-border-subtle flex flex-col justify-between">
           <div>
             <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
@@ -78,6 +88,7 @@ export function OverviewPanel({
             </TijarahButton>
           </div>
         </TijarahCard>
+        */}
 
         {/* Primary Address Card */}
         <div>
@@ -101,6 +112,51 @@ export function OverviewPanel({
           )}
         </div>
       </div>
+
+      {/* Wishlist Saya */}
+      <TijarahCard tijarahVariant="default" className="p-5 sm:p-6 border border-border-subtle">
+        <div className="flex items-center justify-between gap-2 mb-4">
+          <h4 className="font-bold text-sm text-text-primary flex items-center gap-2">
+            <Heart className="w-4 h-4 text-rose-500 fill-rose-500" />
+            <span>{locale === "en" ? "My Wishlist" : "Produk Favorit (Wishlist)"}</span>
+          </h4>
+          <Link href="/products" className="text-xs font-semibold text-primary-sage hover:underline">
+            {locale === "en" ? "Browse Catalog" : "Jelajahi Katalog"}
+          </Link>
+        </div>
+
+        {wishlist.length === 0 ? (
+          <p className="text-xs text-text-muted">
+            {locale === "en"
+              ? "No saved products yet. Click the heart icon on any product to save it here."
+              : "Belum ada produk favorit. Klik ikon hati pada halaman produk untuk menyimpannya di sini."}
+          </p>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {wishlist.map((item) => (
+              <Link
+                key={item.id}
+                href={`/products/${item.id}`}
+                className="flex items-center gap-3 p-3 rounded-xl border border-border-subtle bg-canvas hover:border-primary-sage transition-colors"
+              >
+                <div className="w-12 h-12 rounded-lg bg-surface overflow-hidden shrink-0 flex items-center justify-center border border-border-subtle">
+                  {item.imageUrl ? (
+                    <img src={item.imageUrl} alt={item.name} className="w-full h-full object-cover" />
+                  ) : (
+                    <Heart className="w-4 h-4 text-text-muted/40" />
+                  )}
+                </div>
+                <div className="min-w-0">
+                  <p className="text-xs font-bold text-text-primary truncate">{item.name}</p>
+                  <p className="text-xs font-mono font-semibold text-primary-sage">
+                    {formatCurrency(Number(item.normalPrice ?? item.regularPrice ?? 0))}
+                  </p>
+                </div>
+              </Link>
+            ))}
+          </div>
+        )}
+      </TijarahCard>
     </div>
   );
 }

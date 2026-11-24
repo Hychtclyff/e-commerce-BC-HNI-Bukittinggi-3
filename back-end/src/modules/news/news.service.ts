@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import { pool } from '@/prisma/db';
 import { AppError } from '@/utils/AppError';
 
@@ -42,11 +43,15 @@ export const newsService = {
     return res.rows.map((r) => ({
       id: r.id,
       title: r.title,
+      titleEn: r.title_en || null,
       slug: r.slug,
       summary: r.summary,
+      summaryEn: r.summary_en || null,
       content: r.content,
+      contentEn: r.content_en || null,
       category: r.category,
       tags: r.tags || [],
+      taggedProductIds: Array.isArray(r.tagged_product_ids) ? r.tagged_product_ids : [],
       thumbnailUrl: r.thumbnail_url,
       status: r.status,
       authorName: r.author_name,
@@ -70,11 +75,15 @@ export const newsService = {
     return {
       id: r.id,
       title: r.title,
+      titleEn: r.title_en || null,
       slug: r.slug,
       summary: r.summary,
+      summaryEn: r.summary_en || null,
       content: r.content,
+      contentEn: r.content_en || null,
       category: r.category,
       tags: r.tags || [],
+      taggedProductIds: Array.isArray(r.tagged_product_ids) ? r.tagged_product_ids : [],
       thumbnailUrl: r.thumbnail_url,
       status: r.status,
       authorName: r.author_name,
@@ -85,7 +94,7 @@ export const newsService = {
   },
 
   async createNews(payload: any) {
-    const id = `NEWS-${Date.now().toString().slice(-6)}`;
+    const id = crypto.randomUUID();
     const baseSlug = (payload.slug || payload.title || `berita-${id}`)
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, '-')
@@ -100,15 +109,18 @@ export const newsService = {
 
     const res = await pool.query(
       `INSERT INTO store.news
-       (id, title, slug, summary, content, category, tags, thumbnail_url, status, author_name)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+       (id, title, title_en, slug, summary, summary_en, content, content_en, category, tags, thumbnail_url, status, author_name)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
        RETURNING *`,
       [
         id,
         payload.title,
+        payload.titleEn || null,
         slug,
         payload.summary || '',
+        payload.summaryEn || null,
         payload.content || '',
+        payload.contentEn || null,
         payload.category || 'EDUKASI_HERBAL',
         tagsArray,
         payload.thumbnailUrl || null,
@@ -130,20 +142,26 @@ export const newsService = {
     const res = await pool.query(
       `UPDATE store.news
        SET title = COALESCE($1, title),
-           summary = COALESCE($2, summary),
-           content = COALESCE($3, content),
-           category = COALESCE($4, category),
-           tags = COALESCE($5, tags),
-           thumbnail_url = COALESCE($6, thumbnail_url),
-           status = COALESCE($7, status),
-           author_name = COALESCE($8, author_name),
+           title_en = COALESCE($2, title_en),
+           summary = COALESCE($3, summary),
+           summary_en = COALESCE($4, summary_en),
+           content = COALESCE($5, content),
+           content_en = COALESCE($6, content_en),
+           category = COALESCE($7, category),
+           tags = COALESCE($8, tags),
+           thumbnail_url = COALESCE($9, thumbnail_url),
+           status = COALESCE($10, status),
+           author_name = COALESCE($11, author_name),
            updated_at = NOW()
-       WHERE id = $9
+       WHERE id = $12
        RETURNING *`,
       [
         payload.title,
+        payload.titleEn ?? null,
         payload.summary,
+        payload.summaryEn ?? null,
         payload.content,
+        payload.contentEn ?? null,
         payload.category,
         tagsArray,
         payload.thumbnailUrl,

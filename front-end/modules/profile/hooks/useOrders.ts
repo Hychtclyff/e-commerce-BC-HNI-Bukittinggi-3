@@ -77,8 +77,24 @@ export function useOrders(options: UseOrdersOptions = {}) {
 
   // 3. Mutation: Batalkan Pesanan
   const cancelOrderMutation = useMutation({
-    mutationFn: async ({ orderId, reason }: { orderId: string; reason?: string }) => {
-      return await profileApi.cancelOrder(orderId, reason);
+    mutationFn: async ({
+      orderId,
+      reason,
+      refundBankName,
+      refundAccountNumber,
+      refundAccountName,
+    }: {
+      orderId: string;
+      reason?: string;
+      refundBankName?: string;
+      refundAccountNumber?: string;
+      refundAccountName?: string;
+    }) => {
+      return await profileApi.cancelOrder(orderId, reason, {
+        refundBankName,
+        refundAccountNumber,
+        refundAccountName,
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["user-orders"] });

@@ -66,6 +66,44 @@ export const productsService = {
 
       let products = res.rows;
 
+      // Sertakan produk Non-HNI aktif agar muncul di katalog shop (#BUG-C04B24AF)
+      try {
+        const nonHniRes = await pool.query(
+          `SELECT id, sku, name, category, price, stock, unit, created_at
+           FROM store.non_hni_products
+           WHERE stock > 0
+           ORDER BY created_at DESC`
+        );
+        const mappedNonHni = nonHniRes.rows.map((nh: any) => ({
+          id: nh.id,
+          sku: nh.sku,
+          name: nh.name,
+          category: nh.category || 'Non-HNI',
+          normalPrice: Number(nh.price || 0),
+          agentPrice: Number(nh.price || 0),
+          tpPoints: 0,
+          stock: Number(nh.stock || 0),
+          unit: nh.unit || 'PCS',
+          imageUrl: '/images/products/default.png',
+          description: `Produk Mitra Non-HNI (${nh.unit || 'PCS'})`,
+          isActive: true,
+          isSeparable: false,
+          defaultBreakdownQty: null,
+          isFraction: false,
+          parentProductId: null,
+          allowAgentPrice: false,
+          rewardPoints: 0,
+          physicalStock: Number(nh.stock || 0),
+          pointStock: 0,
+          isNonHni: true,
+          createdAt: nh.created_at,
+          updatedAt: nh.created_at,
+        }));
+        products = [...products, ...mappedNonHni];
+      } catch {
+        // Ignore if store.non_hni_products not yet initialized
+      }
+
       if (query.search) {
         const s = query.search.toLowerCase();
         products = products.filter(
@@ -122,7 +160,41 @@ export const productsService = {
         [id],
       );
 
-      const product = res.rows[0];
+      let product = res.rows[0];
+      if (!product) {
+        try {
+          const nhRes = await pool.query(
+            `SELECT id, sku, name, category, price, stock, unit, created_at
+             FROM store.non_hni_products
+             WHERE id = $1 LIMIT 1`,
+            [id]
+          );
+          if (nhRes.rows[0]) {
+            const nh = nhRes.rows[0];
+            product = {
+              id: nh.id,
+              sku: nh.sku,
+              name: nh.name,
+              category: nh.category || 'Non-HNI',
+              normalPrice: Number(nh.price || 0),
+              agentPrice: Number(nh.price || 0),
+              tpPoints: 0,
+              stock: Number(nh.stock || 0),
+              unit: nh.unit || 'PCS',
+              imageUrl: '/images/products/default.png',
+              description: `Produk Mitra Non-HNI (${nh.unit || 'PCS'})`,
+              isActive: true,
+              isSeparable: false,
+              allowAgentPrice: false,
+              isNonHni: true,
+              createdAt: nh.created_at,
+              updatedAt: nh.created_at,
+            };
+          }
+        } catch {
+          // ignore
+        }
+      }
       if (!product) {
         throw new AppError(t("products.product_not_found", {}, lang), 404);
       }

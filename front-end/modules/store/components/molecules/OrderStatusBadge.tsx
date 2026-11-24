@@ -72,6 +72,21 @@ export const OrderStatusBadge: React.FC<OrderStatusBadgeProps> = ({ status, clas
       variant: "danger",
       icon: <AlertCircle className="w-3 h-3" />,
     },
+    RETURN_REQUESTED: {
+      label: "Pengajuan Retur",
+      variant: "warning",
+      icon: <AlertCircle className="w-3 h-3" />,
+    },
+    RETURN_APPROVED: {
+      label: "Retur Disetujui",
+      variant: "primary",
+      icon: <PackageCheck className="w-3 h-3" />,
+    },
+    REFUNDED: {
+      label: "Dana Dikembalikan",
+      variant: "secondary",
+      icon: <CheckCircle2 className="w-3 h-3" />,
+    },
   };
 
   const current = configMap[status] || {

@@ -261,23 +261,35 @@ export const ReportsPanel: React.FC<IReportsPanelProps> = ({ metrics, orders }) 
         </div>
 
         {chartData.length > 0 ? (
-          <div className="pt-4 pb-2">
-            <div className="h-48 flex items-end gap-2 sm:gap-3 border-b border-border-subtle px-2 overflow-x-auto">
+          <div className="pt-2 pb-2">
+            <div className="h-72 pt-20 flex items-end gap-2 sm:gap-3 border-b border-border-subtle px-2 overflow-x-auto">
               {chartData.map((item, idx) => {
                 const heightPct = Math.max(12, Math.round((item.revenue / maxRevenueInChart) * 100));
                 const tpVal = item.tpPoints || 0;
                 const tpHeightPct = tpVal > 0 ? Math.max(10, Math.round((tpVal / maxTpInChart) * 100)) : 4;
+                const tooltipPosClass =
+                  idx === 0
+                    ? "left-0"
+                    : idx === chartData.length - 1
+                      ? "right-0"
+                      : "left-1/2 -translate-x-1/2";
+
+                const maxBarPct = Math.max(heightPct, tpHeightPct);
 
                 return (
-                  <div key={idx} className="flex-1 min-w-[38px] flex flex-col items-center gap-1 h-full justify-end group relative">
-                    {/* Tooltip Hover */}
-                    <div className="absolute -top-14 opacity-0 group-hover:opacity-100 transition-opacity bg-black text-white text-[10px] p-2 rounded-lg pointer-events-none whitespace-nowrap z-20 shadow-lg">
-                      <p className="font-bold">{item.date}</p>
-                      <p className="text-primary-sage">Omzet: {formatCurrency(item.revenue)}</p>
-                      <p className="text-accent-gold">{tpVal.toLocaleString("id-ID")} TP ({item.orderCount} trx)</p>
-                    </div>
+                  <div key={idx} className="flex-1 min-w-[38px] flex flex-col items-center gap-1 h-full justify-end">
+                    {/* Wrapper Bar (relative terhadap tinggi bar saja, tanpa label tanggal di bawah) */}
+                    <div className="relative w-full flex-1 min-h-0 flex items-end justify-center gap-1 group">
+                      {/* Tooltip Hover presisi di atas bar tertinggi pada kolom ini */}
+                      <div
+                        style={{ bottom: `calc(${maxBarPct}% + 8px)` }}
+                        className={`absolute ${tooltipPosClass} opacity-0 group-hover:opacity-100 transition-opacity bg-black text-white text-[10px] p-2 rounded-lg pointer-events-none whitespace-nowrap z-30 shadow-lg`}
+                      >
+                        <p className="font-bold">{item.date}</p>
+                        <p className="text-primary-sage">Omzet: {formatCurrency(item.revenue)}</p>
+                        <p className="text-accent-gold">{tpVal.toLocaleString("id-ID")} TP ({item.orderCount} trx)</p>
+                      </div>
 
-                    <div className="w-full flex items-end justify-center gap-1 h-full">
                       {/* Bar Omzet */}
                       <div
                         style={{ height: `${heightPct}%` }}
@@ -289,7 +301,7 @@ export const ReportsPanel: React.FC<IReportsPanelProps> = ({ metrics, orders }) 
                         className="w-1/2 max-w-[16px] bg-accent-gold rounded-t-md transition-all group-hover:brightness-110"
                       />
                     </div>
-                    <span className="text-[10px] text-text-muted font-mono mt-1 whitespace-nowrap">
+                    <span className="text-[10px] text-text-muted font-mono mt-1 whitespace-nowrap shrink-0">
                       {item.date.slice(8)}/{item.date.slice(5, 7)}
                     </span>
                   </div>

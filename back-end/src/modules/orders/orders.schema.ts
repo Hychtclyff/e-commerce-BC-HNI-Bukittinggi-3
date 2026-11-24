@@ -14,6 +14,9 @@ export const getUserOrdersQuerySchema = z.object({
 
 export const cancelOrderBodySchema = z.object({
     reason: z.string().optional().default("Dibatalkan oleh pelanggan"),
+    refundBankName: z.string().optional(),
+    refundAccountNumber: z.string().optional(),
+    refundAccountName: z.string().optional(),
 });
 
 export const getUserOrdersSchema = validateSchema({

@@ -8,6 +8,7 @@ import {
     confirmDeliveredSchema,
 } from "./orders.schema";
 import { ordersController } from "./orders.controller";
+import { requireAuth } from "@/utils/authGuard";
 
 export async function ordersRoutes(route: FastifyInstance) {
     const server = route.withTypeProvider<ZodTypeProvider>();
@@ -46,4 +47,12 @@ export async function ordersRoutes(route: FastifyInstance) {
         confirmDeliveredSchema,
         ordersController.confirmDelivered
     );
+
+    server.register(async (authed) => {
+        authed.addHook("preHandler", requireAuth);
+        authed.get("/my-returns", ordersController.getUserReturns);
+        authed.get("/:id/return", ordersController.getOrderReturn);
+        authed.post("/:id/return", ordersController.createOrderReturn);
+        authed.post("/:id/confirm-refund-received", ordersController.confirmRefundReceived);
+    });
 }

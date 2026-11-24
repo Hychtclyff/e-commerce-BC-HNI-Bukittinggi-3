@@ -74,6 +74,11 @@ export const Footer = () => {
                                     {t("privacy")}
                                 </Link>
                             </li>
+                            <li>
+                                <Link href="/terms" className="hover:text-primary-sage transition-colors">
+                                    Syarat & Ketentuan
+                                </Link>
+                            </li>
                         </ul>
                     </div>
 

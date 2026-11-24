@@ -2,6 +2,7 @@ import axios from "axios";
 import { createClient } from "@/utils/supabase/client";
 import { useAuthStore } from "@/modules/auth/services/auth.store";
 import { handleApiError } from "@/utils/toast";
+import { recordApiTelemetry, recordPlaywrightApiHit } from "@/lib/dev/qaTelemetry";
 
 const API_BASE_URL =
     process.env.NEXT_PUBLIC_BE_URL ?? "http://localhost:5000/api/v1";
@@ -38,6 +39,18 @@ export const apiClient = axios.create({
     timeout: 15000, // 15 detik timeout
 });
 
+function isJwtExpired(token: string): boolean {
+    try {
+        const parts = token.split(".");
+        if (parts.length !== 3) return false;
+        const payload = JSON.parse(atob(parts[1].replace(/-/g, "+").replace(/_/g, "/")));
+        if (!payload?.exp) return false;
+        return payload.exp * 1000 < Date.now() + 10_000;
+    } catch {
+        return false;
+    }
+}
+
 // ── Request Interceptor: Auto-attach Auth Bearer Token & Dynamic Language ────
 apiClient.interceptors.request.use(
     async (config) => {
@@ -50,11 +63,27 @@ apiClient.interceptors.request.use(
                 // 2. Cek token dari Zustand Store lebih dulu
                 let token = useAuthStore.getState().accessToken;
 
-                // 3. Fallback ke Supabase Session jika tidak ada di Zustand
+                // 3. Fallback ke cookie access_token jika Zustand belum ter-hydrate
                 if (!token) {
+                    const cookieMatch = document.cookie.match(/(?:^|;\s*)access_token=([^;]*)/);
+                    if (cookieMatch?.[1]) {
+                        token = decodeURIComponent(cookieMatch[1]);
+                    }
+                }
+
+                // 4. Jika token kosong atau sudah kedaluwarsa, ambil/refresh dari Supabase Session
+                if (!token || isJwtExpired(token)) {
                     const supabase = createClient();
                     const { data } = await supabase.auth.getSession();
-                    token = data.session?.access_token ?? null;
+                    const freshToken = data.session?.access_token ?? null;
+                    if (freshToken) {
+                        token = freshToken;
+                        useAuthStore.getState().setTokens({
+                            accessToken: freshToken,
+                            refreshToken: data.session?.refresh_token ?? undefined,
+                        });
+                        document.cookie = `access_token=${freshToken}; path=/; max-age=86400; SameSite=Lax`;
+                    }
                 }
 
                 if (token) {
@@ -76,11 +105,162 @@ apiClient.interceptors.request.use(
     }
 );
 
-// ── Response Interceptor: Uniform Error Handling ────────────────────────────
+// ── Single-Flight Refresh Queue untuk 401 Unauthorized ────────────────────────
+let isRefreshing = false;
+let refreshSubscribers: Array<{
+    resolve: (token: string) => void;
+    reject: (err: any) => void;
+}> = [];
+
+function processRefreshQueue(error: any, token: string | null = null) {
+    refreshSubscribers.forEach(({ resolve, reject }) => {
+        if (token) {
+            resolve(token);
+        } else {
+            reject(error);
+        }
+    });
+    refreshSubscribers = [];
+}
+
+function clearAuthSession() {
+    useAuthStore.getState().logout();
+    if (typeof window !== "undefined") {
+        document.cookie = "access_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
+        document.cookie = "refresh_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
+        try {
+            const supabase = createClient();
+            void supabase.auth.signOut();
+        } catch {
+            // ignore
+        }
+    }
+}
+
+async function attemptSessionRefresh(): Promise<string | null> {
+    if (typeof window === "undefined") return null;
+
+    // 1. Coba refresh via Supabase Session terlebih dahulu
+    try {
+        const supabase = createClient();
+        const { data, error } = await supabase.auth.refreshSession();
+        if (!error && data?.session?.access_token) {
+            const freshToken = data.session.access_token;
+            const freshRefresh = data.session.refresh_token ?? undefined;
+            useAuthStore.getState().setTokens({
+                accessToken: freshToken,
+                refreshToken: freshRefresh,
+            });
+            document.cookie = `access_token=${freshToken}; path=/; max-age=86400; SameSite=Lax`;
+            if (freshRefresh) {
+                document.cookie = `refresh_token=${freshRefresh}; path=/; max-age=604800; SameSite=Lax`;
+            }
+            return freshToken;
+        }
+    } catch {
+        // lanjut ke internal refresh token
+    }
+
+    // 2. Fallback: Refresh via Backend /auth/refresh menggunakan refreshToken
+    let storedRefreshToken = useAuthStore.getState().refreshToken;
+    if (!storedRefreshToken) {
+        const match = document.cookie.match(/(?:^|;\s*)refresh_token=([^;]*)/);
+        if (match?.[1]) storedRefreshToken = decodeURIComponent(match[1]);
+    }
+
+    if (!storedRefreshToken) return null;
+
+    try {
+        const res = await axios.post(`${API_BASE_URL}/auth/refresh`, {
+            refreshToken: storedRefreshToken,
+        });
+        const payload = res.data?.data ?? res.data;
+        const nextAccessToken = payload?.appToken || payload?.token || payload?.accessToken;
+        const nextRefreshToken = payload?.refreshToken || storedRefreshToken;
+
+        if (nextAccessToken) {
+            useAuthStore.getState().setTokens({
+                accessToken: nextAccessToken,
+                refreshToken: nextRefreshToken,
+            });
+            document.cookie = `access_token=${nextAccessToken}; path=/; max-age=86400; SameSite=Lax`;
+            document.cookie = `refresh_token=${nextRefreshToken}; path=/; max-age=604800; SameSite=Lax`;
+            return nextAccessToken;
+        }
+    } catch {
+        return null;
+    }
+
+    return null;
+}
+
+// ── Response Interceptor: Uniform Error Handling + Auto Refresh ─────────────
 apiClient.interceptors.response.use(
-    (response) => response,
-    (error) => {
+    (response) => {
+        if (process.env.NODE_ENV === "development") {
+            recordPlaywrightApiHit({
+                method: String(response.config?.method || "GET").toUpperCase(),
+                url: String(response.config?.url || ""),
+                status: response.status,
+            });
+        }
+        return response;
+    },
+    async (error) => {
+        const originalRequest = error.config as any;
         const status = error.response?.status;
+        const requestUrl = String(originalRequest?.url || "");
+
+        const isAuthEndpoint =
+            requestUrl.includes("/auth/login") ||
+            requestUrl.includes("/auth/register") ||
+            requestUrl.includes("/auth/refresh") ||
+            requestUrl.includes("/auth/forgot-password") ||
+            requestUrl.includes("/auth/reset-password");
+
+        // Coba silent refresh token saat 401 sebelum menampilkan error / redirect
+        if (
+            typeof window !== "undefined" &&
+            status === 401 &&
+            originalRequest &&
+            !originalRequest._retry &&
+            !isAuthEndpoint &&
+            !originalRequest.skipAuthRedirect
+        ) {
+            if (isRefreshing) {
+                return new Promise<string>((resolve, reject) => {
+                    refreshSubscribers.push({ resolve, reject });
+                })
+                    .then((newToken) => {
+                        originalRequest.headers = originalRequest.headers || {};
+                        originalRequest.headers.Authorization = `Bearer ${newToken}`;
+                        return apiClient(originalRequest);
+                    })
+                    .catch((refreshErr) => Promise.reject(refreshErr));
+            }
+
+            originalRequest._retry = true;
+            isRefreshing = true;
+
+            try {
+                const newToken = await attemptSessionRefresh();
+                if (newToken) {
+                    processRefreshQueue(null, newToken);
+                    originalRequest.headers = originalRequest.headers || {};
+                    originalRequest.headers.Authorization = `Bearer ${newToken}`;
+                    return apiClient(originalRequest);
+                }
+
+                processRefreshQueue(error, null);
+                clearAuthSession();
+            } catch (refreshErr) {
+                processRefreshQueue(refreshErr, null);
+                clearAuthSession();
+            } finally {
+                isRefreshing = false;
+            }
+        }
+
         const errorMessage =
             error.response?.data?.message ||
             error.response?.data?.error ||
@@ -94,33 +274,61 @@ apiClient.interceptors.response.use(
         (formattedError as any).status = status;
         (formattedError as any).data = error.response?.data;
 
+        if (process.env.NODE_ENV === "development") {
+            const method = String(originalRequest?.method || "GET").toUpperCase();
+            recordApiTelemetry({
+                method,
+                url: requestUrl,
+                status,
+                message: formattedError.message,
+            });
+            recordPlaywrightApiHit({
+                method,
+                url: requestUrl,
+                status: status || 0,
+                message: formattedError.message,
+            });
+        }
+
         if (typeof window !== "undefined") {
             const currentPath = window.location.pathname;
             const currentLang = getDynamicLanguage();
 
             // Panggil toast error global dari HeroUI jika tidak di-skip secara eksplisit
-            const isSilent = (error.config as any)?.skipGlobalToast || (error.config as any)?.silent;
+            const isSilent = originalRequest?.skipGlobalToast || originalRequest?.silent;
             if (!isSilent) {
                 handleApiError(formattedError);
+                (formattedError as any)._toastShown = true;
             }
 
-            const requestUrl = String(error.config?.url || "");
             const skipAuthRedirect =
-                Boolean((error.config as any)?.skipAuthRedirect) ||
-                requestUrl.includes("/hsis");
+                Boolean(originalRequest?.skipAuthRedirect) ||
+                requestUrl.includes("/hsis") ||
+                requestUrl.includes("/contact-info") ||
+                requestUrl.includes("/delivery-methods") ||
+                requestUrl.includes("/shipping-rates") ||
+                requestUrl.includes("/checkout/calculate") ||
+                requestUrl.includes("/vouchers");
 
-            // Jika 401 Unauthorized (bukan dari endpoint gateway HSIS) dan tidak sedang di halaman login/register/401
-            if (status === 401 && !skipAuthRedirect) {
+            const protectedPathPatterns = [
+                "/store",
+                "/profile",
+                "/orders",
+                "/scan",
+            ];
+            const isProtectedPage = protectedPathPatterns.some((p) => currentPath.includes(p));
+
+            // Jika sesi benar-benar kedaluwarsa (refresh gagal) pada aksi terautentikasi atau rute terlindungi: arahkan ke login
+            if (status === 401 && !skipAuthRedirect && (isProtectedPage || originalRequest?._retry)) {
                 const isAuthPage =
                     currentPath.includes("/login") ||
                     currentPath.includes("/register") ||
                     currentPath.includes("/401");
 
                 if (!isAuthPage) {
-                    const redirectUrl = `/${currentLang}/401?next=${encodeURIComponent(currentPath + window.location.search)}`;
-                    // Dispatch custom event untuk global login modal trigger jika didukung
+                    const nextParam = encodeURIComponent(currentPath + window.location.search);
+                    const redirectUrl = `/${currentLang}/login?expired=1&next=${nextParam}`;
                     window.dispatchEvent(new CustomEvent("unauthorized_session", { detail: { redirectUrl } }));
-                    // Navigasi ke halaman 401
                     window.location.href = redirectUrl;
                 }
             }

@@ -1,151 +1,199 @@
+
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { storeController } from './store.controller';
+import { erpExtensionsController } from './erpExtensions.controller';
 import { hsisDispatcher } from './hsis/hsis.dispatcher';
+import { requireStoreStaff } from '@/utils/authGuard';
 
 export async function storeRoutes(route: FastifyInstance) {
-  // 1. Metrics & Overview
-  route.get('/metrics', storeController.getMetrics);
-
-  // 2. Orders & Fulfillment Flow
-  route.get('/orders', storeController.getOrders);
-  route.post('/orders/pos', storeController.createPosOrder);
-  route.put('/orders/:id/approve', storeController.approveOrder);
-  route.post('/orders/:id/approve', storeController.approveOrder);
-  route.put('/orders/:id/ship', storeController.shipOrder);
-  route.post('/orders/:id/ship', storeController.shipOrder);
-  route.put('/orders/:id/confirm-delivered', storeController.confirmDelivered);
-  route.post('/orders/:id/confirm-delivered', storeController.confirmDelivered);
-  route.put('/orders/:id/complete', storeController.completeOrder);
-  route.post('/orders/:id/complete', storeController.completeOrder);
-  route.put('/orders/:id/ready-for-pickup', storeController.setReadyForPickup);
-  route.post('/orders/:id/ready-for-pickup', storeController.setReadyForPickup);
-  route.put('/orders/:id/reject', storeController.rejectOrder);
-  route.post('/orders/:id/reject', storeController.rejectOrder);
-  route.post('/orders/:id/verify-flow', storeController.executeVerificationFlow);
-  route.post('/orders/cancel-expired', storeController.cancelExpiredOrders);
-
-  // 3. Inventory & Stock (Export & Import - Poin 14)
-  route.get('/inventory', storeController.getInventory);
-  route.get('/inventory/export', storeController.exportInventoryCsv);
-  route.post('/inventory/import', storeController.importInventory);
-  route.post('/inventory', storeController.createInventory);
-  route.put('/inventory/:id', storeController.updateInventory);
-  route.delete('/inventory/:id', storeController.deleteInventory);
-  route.post('/inventory/breakdown', storeController.breakdownProduct);
-  route.post('/inventory/reconcile-points', storeController.reconcileProductPoints);
-
-  // 4. POS Devices
-  route.get('/devices', storeController.getDevices);
-  route.get('/devices/status', storeController.checkDevicesStatus);
-  route.get('/devices/:id/ping', storeController.pingDevice);
-  route.post('/devices', storeController.createDevice);
-  route.put('/devices/:id', storeController.updateDevice);
-  route.delete('/devices/:id', storeController.deleteDevice);
-
-  // 4b. Delivery Methods & Dynamic Shipping Rates
+  // Public store routes (dapat diakses oleh publik / storefront / checkout)
+  route.get('/contact-info', storeController.getContactInfo);
+  route.post('/contact-messages', storeController.createContactMessage);
   route.get('/delivery-methods', storeController.getDeliveryMethods);
   route.get('/delivery-methods/:id', storeController.getDeliveryMethodById);
-  route.post('/delivery-methods', storeController.createDeliveryMethod);
-  route.post('/delivery-methods/reset', storeController.resetDeliveryMethods);
-  route.put('/delivery-methods/:id', storeController.updateDeliveryMethod);
-  route.delete('/delivery-methods/:id', storeController.deleteDeliveryMethod);
   route.post('/shipping-rates', storeController.calculateShippingRates);
+  route.get('/settings', erpExtensionsController.getStoreSettings);
 
-  // 5. Staff & Agents & Jaringan Agen
-  route.get('/agents', storeController.getAgents);
-  route.get('/agents/network', storeController.getAgentNetwork);
-  route.post('/agents/import', storeController.importAgentsCsv);
-  route.post('/agents/sync-self', storeController.syncSelfAgent);
-  route.post('/agents', storeController.createAgent);
-  route.put('/agents/:id', storeController.updateAgent);
-  route.delete('/agents/:id', storeController.deleteAgent);
-  route.post('/agents/:id/password', storeController.setAgentPassword);
+  // Protected store staff routes (hanya untuk staf toko & pemilik)
+  route.register(async (staffRoute) => {
+    staffRoute.addHook('preHandler', requireStoreStaff);
 
-  // 5b. Manajemen Semua Pengguna Terdaftar Sistem (Users & Network CRUD)
-  route.get('/users', storeController.getSystemUsers);
-  route.get('/users/:id', storeController.getSystemUserDetail);
-  route.post('/users', storeController.createSystemUser);
-  route.put('/users/:id', storeController.updateSystemUser);
-  route.delete('/users/:id', storeController.deleteSystemUser);
-  route.post('/users/:id/reset-password', storeController.resetSystemUserPassword);
+    // 1. Metrics & Overview
+    staffRoute.get('/metrics', storeController.getMetrics);
 
-  // 6. Merchants & Non-HNI
-  route.get('/merchants', storeController.getMerchants);
-  route.post('/merchants', storeController.createMerchant);
-  route.put('/merchants/:id', storeController.updateMerchant);
-  route.delete('/merchants/:id', storeController.deleteMerchant);
+    // 2. Orders & Fulfillment Flow
+    staffRoute.get('/orders', storeController.getOrders);
+    staffRoute.post('/orders/pos', storeController.createPosOrder);
+    staffRoute.put('/orders/:id/approve', storeController.approveOrder);
+    staffRoute.post('/orders/:id/approve', storeController.approveOrder);
+    staffRoute.put('/orders/:id/ship', storeController.shipOrder);
+    staffRoute.post('/orders/:id/ship', storeController.shipOrder);
+    staffRoute.put('/orders/:id/confirm-delivered', storeController.confirmDelivered);
+    staffRoute.post('/orders/:id/confirm-delivered', storeController.confirmDelivered);
+    staffRoute.put('/orders/:id/complete', storeController.completeOrder);
+    staffRoute.post('/orders/:id/complete', storeController.completeOrder);
+    staffRoute.put('/orders/:id/ready-for-pickup', storeController.setReadyForPickup);
+    staffRoute.post('/orders/:id/ready-for-pickup', storeController.setReadyForPickup);
+    staffRoute.put('/orders/:id/reject', storeController.rejectOrder);
+    staffRoute.post('/orders/:id/reject', storeController.rejectOrder);
+    staffRoute.post('/orders/:id/confirm-refund', storeController.confirmOrderRefund);
+    staffRoute.post('/orders/:id/print', storeController.triggerPrintOrder);
+    staffRoute.post('/orders/:id/verify-flow', storeController.executeVerificationFlow);
+    staffRoute.post('/orders/cancel-expired', storeController.cancelExpiredOrders);
 
-  route.get('/non-hni-products', storeController.getNonHniProducts);
-  route.post('/non-hni-products', storeController.createNonHniProduct);
-  route.put('/non-hni-products/:id', storeController.updateNonHniProduct);
-  route.delete('/non-hni-products/:id', storeController.deleteNonHniProduct);
+    // 3. Inventory & Stock (Export & Import - Poin 14)
+    staffRoute.get('/inventory', storeController.getInventory);
+    staffRoute.get('/inventory/export', storeController.exportInventoryCsv);
+    staffRoute.post('/inventory/import', storeController.importInventory);
+    staffRoute.post('/inventory', storeController.createInventory);
+    staffRoute.put('/inventory/:id', storeController.updateInventory);
+    staffRoute.delete('/inventory/:id', storeController.deleteInventory);
+    staffRoute.post('/inventory/breakdown', storeController.breakdownProduct);
+    staffRoute.post('/inventory/reconcile-points', storeController.reconcileProductPoints);
 
-  // 7. E-Signatures
-  route.get('/esignatures', storeController.getEsignatures);
-  route.post('/esignatures', storeController.createEsignature);
-  route.delete('/esignatures/:id', storeController.deleteEsignature);
+    // 4. POS Devices
+    staffRoute.get('/devices', storeController.getDevices);
+    staffRoute.get('/devices/status', storeController.checkDevicesStatus);
+    staffRoute.get('/devices/:id/ping', storeController.pingDevice);
+    staffRoute.post('/devices', storeController.createDevice);
+    staffRoute.put('/devices/:id', storeController.updateDevice);
+    staffRoute.delete('/devices/:id', storeController.deleteDevice);
 
-  // 8. Product Knowledge & Testimonials & Khasit Table Editor
-  route.get('/product-knowledge', storeController.getProductKnowledge);
-  route.post('/product-knowledge', storeController.createProductKnowledge);
-  route.put('/product-knowledge/batch', storeController.batchUpdateProductKnowledge);
-  route.put('/product-knowledge/:id', storeController.updateProductKnowledge);
-  route.delete('/product-knowledge/:id', storeController.deleteProductKnowledge);
-  route.post('/product-knowledge/:productId/testimonials', storeController.createTestimonial);
-  route.delete('/testimonials/:id', storeController.deleteTestimonial);
+    // 4b. Delivery Methods & Dynamic Shipping Rates (Staff / Owner Management)
+    staffRoute.post('/delivery-methods', storeController.createDeliveryMethod);
+    staffRoute.post('/delivery-methods/reset', storeController.resetDeliveryMethods);
+    staffRoute.put('/delivery-methods/:id', storeController.updateDeliveryMethod);
+    staffRoute.delete('/delivery-methods/:id', storeController.deleteDeliveryMethod);
 
-  // 9. HSIS Dynamic Endpoints CRUD & Dispatcher (Poin 8)
-  route.get('/hsis-endpoints', storeController.getHsisEndpoints);
-  route.post('/hsis-endpoints', storeController.createHsisEndpoint);
-  route.put('/hsis-endpoints/:id', storeController.updateHsisEndpoint);
-  route.delete('/hsis-endpoints/:id', storeController.deleteHsisEndpoint);
-  route.post('/hsis-endpoints/:id/dispatch', storeController.dispatchHsisEndpoint);
-  route.get('/hsis-controllers', storeController.getHsisControllers);
+    // 5. Staff & Agents & Jaringan Agen
+    staffRoute.get('/agents', storeController.getAgents);
+    staffRoute.get('/agents/network', storeController.getAgentNetwork);
+    staffRoute.post('/agents/import', storeController.importAgentsCsv);
+    staffRoute.post('/agents/sync-self', storeController.syncSelfAgent);
+    staffRoute.post('/agents', storeController.createAgent);
+    staffRoute.put('/agents/:id', storeController.updateAgent);
+    staffRoute.delete('/agents/:id', storeController.deleteAgent);
+    staffRoute.post('/agents/:id/password', storeController.setAgentPassword);
 
-  // 10. HSIS Interactive Chrome Login & Token Management
-  route.post('/hsis/auto-login', storeController.triggerHsisAutoLogin);
-  route.post('/hsis/token', storeController.saveHsisToken);
-  route.post('/hsis/test', storeController.testHsisConnection);
+    // 5b. Manajemen Semua Pengguna Terdaftar Sistem (Users & Network CRUD)
+    staffRoute.get('/users', storeController.getSystemUsers);
+    staffRoute.get('/users/:id', storeController.getSystemUserDetail);
+    staffRoute.post('/users', storeController.createSystemUser);
+    staffRoute.put('/users/:id', storeController.updateSystemUser);
+    staffRoute.delete('/users/:id', storeController.deleteSystemUser);
+    staffRoute.post('/users/:id/reset-password', storeController.resetSystemUserPassword);
 
-  // 10b. HSIS Purchase Orders & Cek Barang Datang (Poin 6)
-  route.get('/hsis/po', storeController.getHsisPurchaseOrders);
-  route.post('/hsis/po/sync', storeController.syncHsisPurchaseOrders);
-  route.post('/hsis/po', storeController.createHsisPurchaseOrder);
-  route.post('/hsis/po/:id/receive', storeController.receiveHsisOrder);
+    // 6. Merchants & Non-HNI
+    staffRoute.get('/merchants', storeController.getMerchants);
+    staffRoute.post('/merchants', storeController.createMerchant);
+    staffRoute.put('/merchants/:id', storeController.updateMerchant);
+    staffRoute.delete('/merchants/:id', storeController.deleteMerchant);
 
-  // 10b-2. HSIS Two-Way Sales Sync & Stock/Saldo Reconciliation
-  route.post('/hsis/sync-saldo', storeController.syncHsisSaldo);
-  route.post('/hsis/sync-sales', storeController.syncHsisSales);
-  route.get('/hsis/reconciliation-report', storeController.getHsisReconciliationReport);
-  route.post('/hsis/orders/:orderId/link-invoice', storeController.linkHsisInvoice);
+    staffRoute.get('/non-hni-products', storeController.getNonHniProducts);
+    staffRoute.post('/non-hni-products', storeController.createNonHniProduct);
+    staffRoute.put('/non-hni-products/:id', storeController.updateNonHniProduct);
+    staffRoute.delete('/non-hni-products/:id', storeController.deleteNonHniProduct);
 
-  // 10c. Kupon Dinamis, CRUD Voucher & Multi-Select User Conditions (Poin 9)
-  route.get('/vouchers', storeController.getStoreVouchers);
-  route.post('/vouchers', storeController.createStoreVoucher);
-  route.put('/vouchers/:id', storeController.updateStoreVoucher);
-  route.delete('/vouchers/:id', storeController.deleteStoreVoucher);
-  route.put('/vouchers/:id/conditions', storeController.updateVoucherConditions);
+    // 7. E-Signatures
+    staffRoute.get('/esignatures', storeController.getEsignatures);
+    staffRoute.post('/esignatures', storeController.createEsignature);
+    staffRoute.delete('/esignatures/:id', storeController.deleteEsignature);
 
-  // 11. Live Logistics, CRM, Analytics & Reconciliation
-  route.get('/shipments', storeController.getShipments);
-  route.get('/customers', storeController.getCustomers);
-  route.get('/stock-velocity', storeController.getStockVelocity);
-  route.get('/restock-recommendations', storeController.getRestockRecommendations);
-  route.get('/reconciliation', storeController.getReconciliation);
-  route.get('/hsis-session', storeController.getHsisSession);
-  route.get('/disease-trends', storeController.getDiseaseTrends);
+    // 8. Product Knowledge & Testimonials & Khasit Table Editor
+    staffRoute.get('/product-knowledge', storeController.getProductKnowledge);
+    staffRoute.post('/product-knowledge', storeController.createProductKnowledge);
+    staffRoute.put('/product-knowledge/batch', storeController.batchUpdateProductKnowledge);
+    staffRoute.put('/product-knowledge/:id', storeController.updateProductKnowledge);
+    staffRoute.delete('/product-knowledge/:id', storeController.deleteProductKnowledge);
+    staffRoute.post('/product-knowledge/:productId/testimonials', storeController.createTestimonial);
+    staffRoute.delete('/testimonials/:id', storeController.deleteTestimonial);
 
-  // 12. Laporan Keuangan (Poin 13)
-  route.get('/reports/financial', storeController.getFinancialReport);
-  route.get('/reports/financial/export', storeController.exportFinancialReportCsv);
+    // 9. HSIS Dynamic Endpoints CRUD & Dispatcher (Poin 8)
+    staffRoute.get('/hsis-endpoints', storeController.getHsisEndpoints);
+    staffRoute.post('/hsis-endpoints', storeController.createHsisEndpoint);
+    staffRoute.put('/hsis-endpoints/:id', storeController.updateHsisEndpoint);
+    staffRoute.delete('/hsis-endpoints/:id', storeController.deleteHsisEndpoint);
+    staffRoute.post('/hsis-endpoints/:id/dispatch', storeController.dispatchHsisEndpoint);
+    staffRoute.get('/hsis-controllers', storeController.getHsisControllers);
 
-  // 13. Manajemen Kontak & Pesan Publik
-  route.get('/contact-info', storeController.getContactInfo);
-  route.put('/contact-info', storeController.updateContactInfo);
-  route.get('/contact-messages', storeController.getContactMessages);
-  route.post('/contact-messages', storeController.createContactMessage);
-  route.patch('/contact-messages/:id', storeController.updateContactMessage);
-  route.delete('/contact-messages/:id', storeController.deleteContactMessage);
+    // 10. HSIS Interactive Chrome Login & Token Management
+    staffRoute.post('/hsis/auto-login', storeController.triggerHsisAutoLogin);
+    staffRoute.post('/hsis/token', storeController.saveHsisToken);
+    staffRoute.post('/hsis/test', storeController.testHsisConnection);
+
+    // 10b. HSIS Purchase Orders & Cek Barang Datang (Poin 6)
+    staffRoute.get('/hsis/po', storeController.getHsisPurchaseOrders);
+    staffRoute.post('/hsis/po/sync', storeController.syncHsisPurchaseOrders);
+    staffRoute.post('/hsis/po', storeController.createHsisPurchaseOrder);
+    staffRoute.post('/hsis/po/:id/receive', storeController.receiveHsisOrder);
+
+    // 10b-2. HSIS Two-Way Sales Sync & Stock/Saldo Reconciliation
+    staffRoute.post('/hsis/sync-saldo', storeController.syncHsisSaldo);
+    staffRoute.post('/hsis/sync-sales', storeController.syncHsisSales);
+    staffRoute.get('/hsis/reconciliation-report', storeController.getHsisReconciliationReport);
+    staffRoute.post('/hsis/orders/:orderId/link-invoice', storeController.linkHsisInvoice);
+
+    // 10c. Kupon Dinamis, CRUD Voucher & Multi-Select User Conditions (Poin 9)
+    staffRoute.get('/vouchers', storeController.getStoreVouchers);
+    staffRoute.post('/vouchers', storeController.createStoreVoucher);
+    staffRoute.put('/vouchers/:id', storeController.updateStoreVoucher);
+    staffRoute.delete('/vouchers/:id', storeController.deleteStoreVoucher);
+    staffRoute.put('/vouchers/:id/conditions', storeController.updateVoucherConditions);
+
+    // 11. Live Logistics, CRM, Analytics & Reconciliation
+    staffRoute.get('/shipments', storeController.getShipments);
+    staffRoute.get('/customers', storeController.getCustomers);
+    staffRoute.get('/stock-velocity', storeController.getStockVelocity);
+    staffRoute.get('/restock-recommendations', storeController.getRestockRecommendations);
+    staffRoute.get('/reconciliation', storeController.getReconciliation);
+    staffRoute.get('/hsis-session', storeController.getHsisSession);
+    staffRoute.get('/disease-trends', storeController.getDiseaseTrends);
+
+    // 12. Laporan Keuangan (Poin 13)
+    staffRoute.get('/reports/financial', storeController.getFinancialReport);
+    staffRoute.get('/reports/financial/export', storeController.exportFinancialReportCsv);
+
+    // 13. Manajemen Pengaturan Kontak & Pesan Masuk (Staff Staf / Admin Only)
+    staffRoute.put('/contact-info', storeController.updateContactInfo);
+    staffRoute.get('/contact-messages', storeController.getContactMessages);
+    staffRoute.patch('/contact-messages/:id', storeController.updateContactMessage);
+    staffRoute.delete('/contact-messages/:id', storeController.deleteContactMessage);
+
+    // 14. Manajemen Shift Kasir (Buka / Tutup Kasir)
+    staffRoute.get('/shifts/current', erpExtensionsController.getCurrentShift);
+    staffRoute.get('/shifts', erpExtensionsController.getShifts);
+    staffRoute.post('/shifts/open', erpExtensionsController.openShift);
+    staffRoute.post('/shifts/:id/close', erpExtensionsController.closeShift);
+
+    // 15. Purchasing, Supplier & Hutang Dagang (Accounts Payable)
+    staffRoute.get('/suppliers', erpExtensionsController.getSuppliers);
+    staffRoute.post('/suppliers', erpExtensionsController.createSupplier);
+    staffRoute.delete('/suppliers/:id', erpExtensionsController.deleteSupplier);
+    staffRoute.get('/purchase-orders', erpExtensionsController.getPurchaseOrders);
+    staffRoute.post('/purchase-orders', erpExtensionsController.createPurchaseOrder);
+    staffRoute.post('/purchase-orders/:id/receive', erpExtensionsController.receivePurchaseOrder);
+    staffRoute.post('/purchase-orders/:id/pay', erpExtensionsController.payPurchaseOrder);
+
+    // 16. Retur / Refund Pesanan
+    staffRoute.get('/returns', erpExtensionsController.getOrderReturns);
+    staffRoute.put('/returns/:id', erpExtensionsController.processOrderReturn);
+
+    // 17. Audit Trail & Pengaturan Toko Terpusat
+    staffRoute.get('/audit-logs', erpExtensionsController.getAuditLogs);
+    staffRoute.put('/settings', erpExtensionsController.updateStoreSettings);
+
+    // 17b. Master Kategori & Satuan Produk
+    staffRoute.get('/product-categories', erpExtensionsController.getProductCategories);
+    staffRoute.post('/product-categories', erpExtensionsController.createProductCategory);
+    staffRoute.get('/product-units', erpExtensionsController.getProductUnits);
+    staffRoute.post('/product-units', erpExtensionsController.createProductUnit);
+
+    // 18. RBAC Roles & Permissions
+    staffRoute.get('/rbac/roles', erpExtensionsController.getRbacRoles);
+    staffRoute.get('/rbac/permissions', erpExtensionsController.getRbacPermissions);
+    staffRoute.put('/rbac/roles/:id/permissions', erpExtensionsController.updateRolePermissions);
+    staffRoute.put('/rbac/users/:userId/role', erpExtensionsController.assignUserRole);
+  });
 }
 
 /**
