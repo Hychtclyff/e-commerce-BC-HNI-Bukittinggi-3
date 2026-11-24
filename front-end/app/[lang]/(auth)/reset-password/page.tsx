@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { useLocale } from "next-intl";
 import { Link, useRouter } from "@/lib/i18n/navigation";
@@ -11,7 +11,7 @@ import { TijarahInput } from "@/components/atom/tijarahInput";
 import { TijarahButton } from "@/components/atom/tijarahButton";
 import { TijarahAlert } from "@/components/atom/tijarahAlert";
 
-export default function ResetPasswordPage() {
+function ResetPasswordContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const locale = useLocale();
@@ -134,5 +134,19 @@ export default function ResetPasswordPage() {
         </AuthCardWrapper>
       </div>
     </div>
+  );
+}
+
+export default function ResetPasswordPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-[60vh] flex items-center justify-center text-xs text-text-muted">
+          Memuat halaman...
+        </div>
+      }
+    >
+      <ResetPasswordContent />
+    </Suspense>
   );
 }
