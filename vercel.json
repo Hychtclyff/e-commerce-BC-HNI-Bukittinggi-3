@@ -4,7 +4,7 @@
     "back-end": {
       "root": "back-end",
       "framework": "fastify",
-      "installCommand": "npm install"
+      "installCommand": "npm install --legacy-peer-deps"
     },
     "front-end": {
       "root": "front-end",
