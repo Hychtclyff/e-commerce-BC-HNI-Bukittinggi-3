@@ -117,7 +117,7 @@ export const ordersController = {
         const userId = await getEffectiveUserId(req, req.query?.userId);
 
         try {
-            const result = await ordersService.cancelOrder(req.params.id, userId, req.body || {}, lang);
+            const result = await ordersService.cancelOrder(req.params.id, userId, req.body || ({} as CancelOrderBody), lang);
 
             return responseUtil.success({
                 reply,

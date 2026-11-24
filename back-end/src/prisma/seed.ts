@@ -67,7 +67,7 @@ async function seedSuperAdmin() {
   try {
     const { data: listData } = await supabase.auth.admin.listUsers();
     const existingSupa = listData?.users?.find(
-      (u) => u.email?.toLowerCase() === email.toLowerCase()
+      (u: any) => u.email?.toLowerCase() === email.toLowerCase()
     );
     if (existingSupa) {
       supaUserId = existingSupa.id;
@@ -367,7 +367,7 @@ async function main() {
   await db.close();
 }
 
-if (import.meta.main) {
+if (typeof require !== 'undefined' && require.main === module) {
   main().catch((err) => {
     console.error('❌ Seeder error:', err);
     process.exit(1);

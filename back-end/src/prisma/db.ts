@@ -1,7 +1,12 @@
 import 'dotenv/config';
+import fs from 'fs';
+import path from 'path';
 import postgres from '@prisma/orm-postgres/runtime';
 import type { Contract } from './contract.d';
-import contractJson from './contract.json' with { type: 'json' };
+
+const contractJson = JSON.parse(
+  fs.readFileSync(path.join(__dirname, 'contract.json'), 'utf-8')
+);
 
 export const db = postgres<Contract>({
   contractJson,

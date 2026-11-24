@@ -113,7 +113,7 @@ export const authService = {
                     if (syncErr) {
                         const listRes = await supabase.auth.admin.listUsers({ page: 1, perPage: 1000 });
                         const supaUser = listRes.data?.users?.find(
-                            (u) => u.email?.toLowerCase() === payload.email.toLowerCase()
+                            (u: any) => u.email?.toLowerCase() === payload.email.toLowerCase()
                         );
                         if (supaUser) {
                             await supabase.auth.admin.updateUserById(supaUser.id, { password: payload.password });
@@ -807,7 +807,7 @@ export const authService = {
         if (resetSupaErr) {
             const listRes = await supabase.auth.admin.listUsers({ page: 1, perPage: 1000 });
             const matched = listRes.data?.users?.find(
-                (u) => u.email?.toLowerCase() === String(record.email || '').toLowerCase()
+                (u: any) => u.email?.toLowerCase() === String(record.email || '').toLowerCase()
             );
             if (matched) {
                 await supabase.auth.admin.updateUserById(matched.id, { password: newPassword });
@@ -849,7 +849,7 @@ export const authService = {
         if (adminErr) {
             const listRes = await supabase.auth.admin.listUsers({ page: 1, perPage: 1000 });
             const matched = listRes.data?.users?.find(
-                (u) => u.email?.toLowerCase() === String(user.email || '').toLowerCase()
+                (u: any) => u.email?.toLowerCase() === String(user.email || '').toLowerCase()
             );
             if (matched) {
                 const { error: retryErr } = await supabase.auth.admin.updateUserById(matched.id, { password: newPassword });

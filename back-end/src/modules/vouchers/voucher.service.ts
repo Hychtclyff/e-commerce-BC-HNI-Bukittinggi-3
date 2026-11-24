@@ -132,7 +132,7 @@ export const voucherService = {
                 .where({ userId })
                 .all();
 
-            const userVoucherMap = new Map(userVouchers.map(uv => [uv.voucherId, uv]));
+            const userVoucherMap = new Map<string, any>(userVouchers.map((uv: any) => [uv.voucherId, uv]));
 
             return vouchers.map(v => {
                 const uv = userVoucherMap.get(v.id);
