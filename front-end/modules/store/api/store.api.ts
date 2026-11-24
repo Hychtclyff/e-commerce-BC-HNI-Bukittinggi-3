@@ -1976,7 +1976,8 @@ export const storeApi = {
   },
 
   exportFinancialReportUrl(params?: { dateFrom?: string; dateTo?: string }): string {
-    const baseURL = (apiClient.defaults.baseURL || "http://localhost:5000/api/v1").replace(/\/$/, "");
+    const { getBackendApiBaseUrl } = require("@/lib/api/baseUrl");
+    const baseURL = (apiClient.defaults.baseURL || getBackendApiBaseUrl()).replace(/\/$/, "");
     const q = new URLSearchParams();
     if (params?.dateFrom) q.append("dateFrom", params.dateFrom);
     if (params?.dateTo) q.append("dateTo", params.dateTo);
@@ -1985,7 +1986,8 @@ export const storeApi = {
 
   // ─── Batch 3: Export & Import Stok Inventory (Poin 14) ────────
   exportInventoryCsvUrl(): string {
-    const baseURL = (apiClient.defaults.baseURL || "http://localhost:5000/api/v1").replace(/\/$/, "");
+    const { getBackendApiBaseUrl } = require("@/lib/api/baseUrl");
+    const baseURL = (apiClient.defaults.baseURL || getBackendApiBaseUrl()).replace(/\/$/, "");
     return `${baseURL}/store/inventory/export`;
   },
 

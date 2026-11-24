@@ -3,9 +3,9 @@ import { createClient } from "@/utils/supabase/client";
 import { useAuthStore } from "@/modules/auth/services/auth.store";
 import { handleApiError } from "@/utils/toast";
 import { recordApiTelemetry, recordPlaywrightApiHit } from "@/lib/dev/qaTelemetry";
+import { getBackendApiBaseUrl } from "@/lib/api/baseUrl";
 
-const API_BASE_URL =
-    process.env.NEXT_PUBLIC_BE_URL ?? "http://localhost:5000/api/v1";
+const API_BASE_URL = getBackendApiBaseUrl();
 
 /**
  * Membaca bahasa (locale) aktif secara dinamis dari URL pathname atau Cookie

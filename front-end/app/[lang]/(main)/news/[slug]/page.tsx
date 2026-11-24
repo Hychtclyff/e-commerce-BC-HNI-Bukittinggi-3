@@ -2,6 +2,7 @@ import React from "react";
 import { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { NewsArticleView } from "./NewsArticleView";
+import { getBackendApiBaseUrl } from "@/lib/api/baseUrl";
 
 interface NewsDetailPageProps {
   params: Promise<{
@@ -14,7 +15,7 @@ export async function generateMetadata({
   params,
 }: NewsDetailPageProps): Promise<Metadata> {
   const { lang, slug } = await params;
-  const beUrl = process.env.NEXT_PUBLIC_BE_URL || "http://localhost:5000/api/v1";
+  const beUrl = getBackendApiBaseUrl();
 
   try {
     const res = await fetch(`${beUrl}/news/${slug}`, {

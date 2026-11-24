@@ -37,7 +37,8 @@ export const Catalog = async () => {
     }));
 
     try {
-        const beUrl = process.env.NEXT_PUBLIC_BE_URL || "http://localhost:5000/api/v1";
+        const { getBackendApiBaseUrl } = await import("@/lib/api/baseUrl");
+        const beUrl = getBackendApiBaseUrl();
         const res = await fetch(`${beUrl}/products`, {
             cache: "no-store"
         });

@@ -15,12 +15,9 @@ import { shopApi } from "@/modules/shop/api/shop.api";
 import { useOrders } from "@/modules/profile/hooks/useOrders";
 import { showToast } from "@/utils/toast";
 import { createClient } from "@/utils/supabase/client";
+import { getBackendApiBaseUrl } from "@/lib/api/baseUrl";
 
-const API_BASE_URL = (
-  process.env.NEXT_PUBLIC_BE_URL ||
-  process.env.NEXT_PUBLIC_API_URL ||
-  "http://localhost:5000/api/v1"
-).replace(/\/$/, "");
+const API_BASE_URL = getBackendApiBaseUrl();
 
 export function OrderDetailView({ slug, lang }: { slug: string; lang: string }) {
   const router = useRouter();

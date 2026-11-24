@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { initialShopProducts } from "@/modules/shop/api/shop.api";
 import { ShopProduct } from "@/modules/shop/types/shop.types";
 import ProductDetailClient from "./ProductDetailClient";
+import { getBackendApiBaseUrl } from "@/lib/api/baseUrl";
 
 interface Props {
   params: Promise<{
@@ -14,7 +15,7 @@ interface Props {
 async function getProductById(id: string): Promise<ShopProduct | null> {
   // Cek database via API backend
   try {
-    const beUrl = process.env.NEXT_PUBLIC_BE_URL || "http://localhost:5000/api/v1";
+    const beUrl = getBackendApiBaseUrl();
     const res = await fetch(`${beUrl}/products/${id}`, {
       cache: "no-store",
     });

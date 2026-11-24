@@ -1,15 +1,32 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "experimentalServices": {
-    "front-end": {
-      "framework": "nextjs",
-      "root": "front-end",
-      "routePrefix": "/"
-    },
+  "services": {
     "back-end": {
-      "framework": "fastify",
       "root": "back-end",
-      "routePrefix": "/api"
+      "framework": "fastify",
+      "entrypoint": "src/vercel.ts"
+    },
+    "front-end": {
+      "root": "front-end",
+      "framework": "nextjs",
+      "bindings": [
+        {
+          "type": "service",
+          "service": "back-end",
+          "format": "url",
+          "env": "BACKEND_URL"
+        }
+      ]
     }
-  }
+  },
+  "rewrites": [
+    {
+      "source": "/api/(.*)",
+      "destination": { "service": "back-end" }
+    },
+    {
+      "source": "/(.*)",
+      "destination": { "service": "front-end" }
+    }
+  ]
 }
