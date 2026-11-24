@@ -124,3 +124,6 @@ export function buildApp(): FastifyInstance {
 
   return app;
 }
+
+const app = buildApp();
+export default app;

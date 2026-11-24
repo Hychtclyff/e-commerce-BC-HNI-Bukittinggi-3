@@ -4,7 +4,7 @@
     "back-end": {
       "root": "back-end",
       "framework": "fastify",
-      "entrypoint": "src/vercel.ts"
+      "installCommand": "npm install"
     },
     "front-end": {
       "root": "front-end",

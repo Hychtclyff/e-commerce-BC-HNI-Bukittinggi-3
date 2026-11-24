@@ -1,9 +1,7 @@
-import { buildApp } from './app';
+import app from './app';
 import { env } from './config/env';
 import { startExpiredOrdersCron } from './modules/orders/expireOrders';
 import { startPrintQueueCron } from './modules/orders/printQueue';
-
-const app = buildApp();
 
 async function start() {
   try {
