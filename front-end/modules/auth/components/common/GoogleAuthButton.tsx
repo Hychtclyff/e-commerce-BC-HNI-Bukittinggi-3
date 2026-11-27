@@ -3,7 +3,6 @@
 import { useState, useTransition } from "react";
 import { motion } from "framer-motion";
 import { authService } from "@/modules/auth/services/auth.service";
-import { loginWithGoogle } from "@/app/[lang]/(auth)/actions";
 import { TijarahButton } from "@/components/atom/tijarahButton";
 import { TijarahAlert } from "@/components/atom/tijarahAlert";
 
@@ -25,22 +24,21 @@ export function GoogleAuthButton({ mode = "login", label }: GoogleAuthButtonProp
                 const localeMatch = pathname.match(/^\/(id|en)/);
                 const locale = localeMatch ? localeMatch[1] : "id";
                 const nextPath = mode === "register" ? `/${locale}/profile/complete` : `/${locale}`;
-                const redirectTo = `${origin}/${locale}/auth/callback?next=${nextPath}`;
-
-                // Try Backend Google OAuth URL Endpoint first (Per PANDUAN_AUTH_BACKEND)
-                try {
-                    const res = await authService.getGoogleOAuthUrl(redirectTo);
-                    const authUrl = res?.data?.url || res?.url || (typeof res?.data === "string" ? res.data : null);
-                    if (authUrl) {
-                        window.location.href = authUrl;
-                        return;
+                if (typeof window !== "undefined") {
+                    try {
+                        sessionStorage.setItem("oauth_next", nextPath);
+                    } catch {
+                        // ignore sessionStorage error
                     }
-                } catch (backendErr) {
-                    console.warn("Backend getGoogleOAuthUrl fallback to Supabase OAuth Server Action", backendErr);
                 }
+                const redirectTo = `${origin}/${locale}/auth/callback`;
 
-                // Fallback to Server Action (Supabase OAuth)
-                await loginWithGoogle(mode);
+                const res = await authService.getGoogleOAuthUrl(redirectTo);
+                const authUrl = res?.data?.url || res?.url || (typeof res?.data === "string" ? res.data : null);
+                if (!authUrl) {
+                    throw new Error("URL autentikasi Google tidak tersedia dari server.");
+                }
+                window.location.href = authUrl;
             } catch (err: any) {
                 setError(err?.message || "Gagal terhubung ke Google. Coba lagi.");
             }

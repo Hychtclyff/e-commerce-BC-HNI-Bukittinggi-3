@@ -3,7 +3,6 @@
 import { useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
-import { createClient } from "@/utils/supabase/client";
 import {
   storeApi,
   type IStoreMutationResult,
@@ -84,7 +83,7 @@ export function useStoreErp() {
   const queryClient = useQueryClient();
   const tToasts = useTranslations("storeErp.toasts");
 
-  // Real-time ERP order & payment status subscription (Fastify SSE + Supabase Realtime)
+  // Real-time ERP order & payment status subscription (Fastify SSE)
   useEffect(() => {
     const apiBase = getBackendApiBaseUrl();
 
@@ -99,30 +98,8 @@ export function useStoreErp() {
       // Ignore if EventSource unavailable
     }
 
-    let supabaseChannel: any = null;
-    let supabaseClient: ReturnType<typeof createClient> | null = null;
-    try {
-      supabaseClient = createClient();
-      supabaseChannel = supabaseClient
-        .channel("erp-orders-realtime")
-        .on(
-          "postgres_changes",
-          { event: "*", schema: "orders", table: "orders" },
-          () => {
-            queryClient.invalidateQueries({ queryKey: [...KEYS.orders] });
-            queryClient.invalidateQueries({ queryKey: [...KEYS.credit] });
-          }
-        )
-        .subscribe();
-    } catch {
-      // Ignore if Supabase env is not configured
-    }
-
     return () => {
       if (sse) sse.close();
-      if (supabaseClient && supabaseChannel) {
-        supabaseClient.removeChannel(supabaseChannel);
-      }
     };
   }, [queryClient]);
 

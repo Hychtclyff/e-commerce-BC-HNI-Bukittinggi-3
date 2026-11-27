@@ -2,7 +2,6 @@
 
 import { useEffect, useState, Suspense } from "react";
 import { useRouter, useSearchParams, useParams } from "next/navigation";
-import { createClient } from "@/utils/supabase/client";
 import { authService } from "@/modules/auth/services/auth.service";
 import { useAuthStore } from "@/modules/auth/services/auth.store";
 
@@ -19,15 +18,39 @@ function AuthCallbackContent() {
 
     const processCallback = async () => {
       try {
-        const next = searchParams.get("next") || `/${lang}`;
+        let savedNext: string | null = null;
+        if (typeof window !== "undefined") {
+          try {
+            savedNext = sessionStorage.getItem("oauth_next");
+            if (savedNext) sessionStorage.removeItem("oauth_next");
+          } catch {
+            savedNext = null;
+          }
+        }
+        const next = searchParams.get("next") || savedNext || `/${lang}`;
+        const queryError =
+          searchParams.get("error_description") || searchParams.get("error");
+        if (queryError) {
+          router.replace(`/${lang}/login?error=${encodeURIComponent(queryError)}`);
+          return;
+        }
+
         const code = searchParams.get("code");
 
         // ── 1. Penanganan PKCE Code (?code=...) ─────────────────────────────
         if (code) {
           if (isMounted) setStatusText("Mengubah kode verifikasi...");
           const res = await authService.exchangeCode(code);
+          const payload = res?.data ?? res;
           if (res?.error) {
             router.replace(`/${lang}/login?error=${encodeURIComponent(res.error)}`);
+            return;
+          }
+          if (payload?.requireOtp) {
+            const targetEmail = payload.email || "";
+            router.replace(
+              `/${lang}/verify-email?email=${encodeURIComponent(targetEmail)}`
+            );
             return;
           }
           router.replace(next);
@@ -55,32 +78,30 @@ function AuthCallbackContent() {
           const type = hashParams.get("type");
 
           if (accessToken) {
-            try {
-              const response = await authService.authHashCode(accessToken, refreshToken);
-              const payload = response?.data ?? response;
+            const response = await authService.authHashCode(accessToken, refreshToken);
+            const payload = response?.data ?? response;
 
+            if (payload?.requireOtp) {
+              const targetEmail = payload.email || "";
+              router.replace(
+                `/${lang}/verify-email?email=${encodeURIComponent(targetEmail)}`
+              );
+              return;
+            }
 
-              if (payload?.requireOtp) {
-                const targetEmail = payload.email || "";
-                router.replace(
-                  `/${lang}/verify-email?email=${encodeURIComponent(targetEmail)}`
-                );
-                return;
-              }
+            if (response?.error) {
+              router.replace(
+                `/${lang}/login?error=${encodeURIComponent(response.error)}`
+              );
+              return;
+            }
 
-              if (payload.appToken) {
-                const { user } = payload;
-                setAuth({ user, accessToken, refreshToken });
-              }
-
-              if (response?.error) {
-                router.replace(
-                  `/${lang}/login?error=${encodeURIComponent(response.error)}`
-                );
-                return;
-              }
-            } catch (e) {
-              // Abaikan jika backend sync opsional
+            if (payload?.appToken || payload?.token) {
+              setAuth({
+                user: payload.user || null,
+                accessToken: payload.appToken || payload.token,
+                refreshToken: payload.refreshToken || refreshToken || null,
+              });
             }
 
             // Bersihkan URL hash agar token tidak berada di address bar

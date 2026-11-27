@@ -14,7 +14,6 @@ import { checkoutApi } from "@/modules/checkout/api/checkout.api";
 import { shopApi } from "@/modules/shop/api/shop.api";
 import { useOrders } from "@/modules/profile/hooks/useOrders";
 import { showToast } from "@/utils/toast";
-import { createClient } from "@/utils/supabase/client";
 import { getBackendApiBaseUrl } from "@/lib/api/baseUrl";
 
 const API_BASE_URL = getBackendApiBaseUrl();
@@ -61,7 +60,7 @@ export function OrderDetailView({ slug, lang }: { slug: string; lang: string }) 
     }
   }, [slug, loadReceipt]);
 
-  // Real-time payment & order status sync via Fastify SSE + Supabase Realtime
+  // Real-time payment & order status sync via Fastify SSE
   useEffect(() => {
     if (!slug) return;
     let sse: EventSource | null = null;
@@ -99,49 +98,8 @@ export function OrderDetailView({ slug, lang }: { slug: string; lang: string }) 
       setIsRealtimeConnected(false);
     }
 
-    // Secondary listener via Supabase Realtime (if enabled on orders table)
-    let supabaseChannel: any = null;
-    let supabaseClient: ReturnType<typeof createClient> | null = null;
-    try {
-      supabaseClient = createClient();
-      supabaseChannel = supabaseClient
-        .channel(`order-status-${slug}`)
-        .on(
-          "postgres_changes",
-          {
-            event: "UPDATE",
-            schema: "orders",
-            table: "orders",
-          },
-          (payload: any) => {
-            const row = payload?.new;
-            if (!row) return;
-            if (row.id === slug || row.slug === slug || row.orderNumber === slug) {
-              setReceipt((prev) =>
-                prev
-                  ? {
-                      ...prev,
-                      paymentStatus: row.paymentStatus || prev.paymentStatus,
-                      orderStatus: row.orderStatus || prev.orderStatus,
-                    }
-                  : prev
-              );
-              if (row.paymentStatus === "PAID") {
-                loadReceipt();
-              }
-            }
-          }
-        )
-        .subscribe();
-    } catch {
-      // Ignore if Supabase env is not configured
-    }
-
     return () => {
       if (sse) sse.close();
-      if (supabaseClient && supabaseChannel) {
-        supabaseClient.removeChannel(supabaseChannel);
-      }
     };
   }, [slug, isEn, loadReceipt]);
 

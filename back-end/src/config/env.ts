@@ -2,6 +2,7 @@ import dotenv from 'dotenv';
 import path from 'path';
 import { z } from 'zod';
 
+dotenv.config({ path: path.resolve(process.cwd(), '.env.local') });
 dotenv.config({ path: path.resolve(process.cwd(), '.env') });
 
 const envSchema = z.object({

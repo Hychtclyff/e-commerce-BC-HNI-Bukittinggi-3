@@ -6,8 +6,9 @@ export const supabase = createClient(
     env.SUPABASE_SECRET_KEY,
     {
         auth: {
-            autoRefreshToken: true,
-            persistSession: true,
+            autoRefreshToken: false,
+            persistSession: false,
+            flowType: "implicit",
         },
     },
 );

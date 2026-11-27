@@ -103,12 +103,50 @@ export const authService = {
 
     exchangeCode: async (code: string) => {
         const response = await apiClient.post("/auth/exchange-code", { code });
-        return response.data;
+        const resData = response.data;
+        const payload = resData?.data ?? resData;
+        const accessToken = payload?.appToken || payload?.token || payload?.accessToken;
+        const refreshToken = payload?.refreshToken || null;
+
+        if (accessToken) {
+            useAuthStore.getState().setAuth({
+                user: payload?.user || null,
+                accessToken,
+                refreshToken,
+            });
+            if (typeof window !== "undefined") {
+                document.cookie = `access_token=${accessToken}; path=/; max-age=86400; SameSite=Lax`;
+                if (refreshToken) {
+                    document.cookie = `refresh_token=${refreshToken}; path=/; max-age=604800; SameSite=Lax`;
+                }
+            }
+        }
+
+        return resData;
     },
 
     authHashCode: async (accessToken: string, refreshToken: string) => {
         const response = await apiClient.post("/auth/auth-code", { accessToken, refreshToken });
-        return response.data;
+        const resData = response.data;
+        const payload = resData?.data ?? resData;
+        const nextAccessToken = payload?.appToken || payload?.token || payload?.accessToken;
+        const nextRefreshToken = payload?.refreshToken || refreshToken || null;
+
+        if (nextAccessToken) {
+            useAuthStore.getState().setAuth({
+                user: payload?.user || null,
+                accessToken: nextAccessToken,
+                refreshToken: nextRefreshToken,
+            });
+            if (typeof window !== "undefined") {
+                document.cookie = `access_token=${nextAccessToken}; path=/; max-age=86400; SameSite=Lax`;
+                if (nextRefreshToken) {
+                    document.cookie = `refresh_token=${nextRefreshToken}; path=/; max-age=604800; SameSite=Lax`;
+                }
+            }
+        }
+
+        return resData;
     },
 
     resendOtp: async (email: string, type: "signup" | "email_change" = "signup") => {

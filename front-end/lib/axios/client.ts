@@ -1,5 +1,4 @@
 import axios from "axios";
-import { createClient } from "@/utils/supabase/client";
 import { useAuthStore } from "@/modules/auth/services/auth.store";
 import { handleApiError } from "@/utils/toast";
 import { recordApiTelemetry, recordPlaywrightApiHit } from "@/lib/dev/qaTelemetry";
@@ -39,18 +38,6 @@ export const apiClient = axios.create({
     timeout: 15000, // 15 detik timeout
 });
 
-function isJwtExpired(token: string): boolean {
-    try {
-        const parts = token.split(".");
-        if (parts.length !== 3) return false;
-        const payload = JSON.parse(atob(parts[1].replace(/-/g, "+").replace(/_/g, "/")));
-        if (!payload?.exp) return false;
-        return payload.exp * 1000 < Date.now() + 10_000;
-    } catch {
-        return false;
-    }
-}
-
 // ── Request Interceptor: Auto-attach Auth Bearer Token & Dynamic Language ────
 apiClient.interceptors.request.use(
     async (config) => {
@@ -68,21 +55,6 @@ apiClient.interceptors.request.use(
                     const cookieMatch = document.cookie.match(/(?:^|;\s*)access_token=([^;]*)/);
                     if (cookieMatch?.[1]) {
                         token = decodeURIComponent(cookieMatch[1]);
-                    }
-                }
-
-                // 4. Jika token kosong atau sudah kedaluwarsa, ambil/refresh dari Supabase Session
-                if (!token || isJwtExpired(token)) {
-                    const supabase = createClient();
-                    const { data } = await supabase.auth.getSession();
-                    const freshToken = data.session?.access_token ?? null;
-                    if (freshToken) {
-                        token = freshToken;
-                        useAuthStore.getState().setTokens({
-                            accessToken: freshToken,
-                            refreshToken: data.session?.refresh_token ?? undefined,
-                        });
-                        document.cookie = `access_token=${freshToken}; path=/; max-age=86400; SameSite=Lax`;
                     }
                 }
 
@@ -128,40 +100,13 @@ function clearAuthSession() {
     if (typeof window !== "undefined") {
         document.cookie = "access_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
         document.cookie = "refresh_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
-        try {
-            const supabase = createClient();
-            void supabase.auth.signOut();
-        } catch {
-            // ignore
-        }
     }
 }
 
 async function attemptSessionRefresh(): Promise<string | null> {
     if (typeof window === "undefined") return null;
 
-    // 1. Coba refresh via Supabase Session terlebih dahulu
-    try {
-        const supabase = createClient();
-        const { data, error } = await supabase.auth.refreshSession();
-        if (!error && data?.session?.access_token) {
-            const freshToken = data.session.access_token;
-            const freshRefresh = data.session.refresh_token ?? undefined;
-            useAuthStore.getState().setTokens({
-                accessToken: freshToken,
-                refreshToken: freshRefresh,
-            });
-            document.cookie = `access_token=${freshToken}; path=/; max-age=86400; SameSite=Lax`;
-            if (freshRefresh) {
-                document.cookie = `refresh_token=${freshRefresh}; path=/; max-age=604800; SameSite=Lax`;
-            }
-            return freshToken;
-        }
-    } catch {
-        // lanjut ke internal refresh token
-    }
-
-    // 2. Fallback: Refresh via Backend /auth/refresh menggunakan refreshToken
+    // Refresh via Backend /auth/refresh menggunakan refreshToken
     let storedRefreshToken = useAuthStore.getState().refreshToken;
     if (!storedRefreshToken) {
         const match = document.cookie.match(/(?:^|;\s*)refresh_token=([^;]*)/);

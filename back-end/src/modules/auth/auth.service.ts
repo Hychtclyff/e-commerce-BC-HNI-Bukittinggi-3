@@ -271,7 +271,8 @@ export const authService = {
             const { data, error } = await supabase.auth.signInWithOAuth({
                 provider: 'google',
                 options: {
-                    redirectTo: redirectTo || 'http://localhost:3000/auth/callback',
+                    redirectTo: redirectTo || `${env.FRONTEND_URL}/id/auth/callback`,
+                    skipBrowserRedirect: true,
                     queryParams: {
                         access_type: 'offline',
                         prompt: 'consent',
@@ -326,31 +327,23 @@ export const authService = {
                 conflictOn: { email: user.email! },
             });
 
-            const { isVerified } = checkUserVerification(user, existingUser);
+            if (updatedUser.isDeleted) {
+                throw new AppError(t('auth.account_disabled', {}, lang), 400);
+            }
 
-            if (!isVerified) {
-                // Gunakan signInWithOtp karena akun Google di Supabase Auth otomatis berstatus email_confirmed_at.
-                // resend({ type: 'signup' }) akan di-abaikan oleh Supabase untuk email yang sudah terkonfirmasi.
-                const { error: otpErr } = await supabase.auth.signInWithOtp({
-                    email: user.email!,
-                    options: {
-                        shouldCreateUser: false,
-                    }
-                });
-
-                if (otpErr) {
-                    console.error("❌ Gagal mengirimkan email OTP untuk user Google baru:", otpErr.message);
-                }
-
-                const { passwordHash, ...userWithoutPassword } = updatedUser;
-
-                return {
-                    isNewUser: true,
-                    requireOtp: true,
-                    email: user.email!,
-                    user: userWithoutPassword,
-                    message: t('auth.register_otp_sent', {}, lang),
-                };
+            let staffRole: string | null = null;
+            try {
+                const staffRes = await pool.query(
+                    `SELECT role FROM store.agents
+                     WHERE (linked_user_id = $1 OR LOWER(email) = LOWER($2))
+                       AND status = 'ACTIVE'
+                       AND COALESCE(source_channel, 'TIJARAH') <> 'HSIS_SYNC'
+                     LIMIT 1`,
+                    [updatedUser.id, updatedUser.email || '']
+                );
+                staffRole = staffRes.rows[0]?.role ? String(staffRes.rows[0].role).toUpperCase() : null;
+            } catch {
+                staffRole = null;
             }
 
             const appToken = jwt.sign(
@@ -363,13 +356,27 @@ export const authService = {
                 { expiresIn: (env.JWT_EXPIRES_IN || '1d') as jwt.SignOptions['expiresIn'] }
             );
 
+            const refreshToken =
+                data.session?.refresh_token ||
+                jwt.sign(
+                    { userId: updatedUser.id, email: updatedUser.email, type: 'refresh' },
+                    env.JWT_SECRET,
+                    { expiresIn: '7d' }
+                );
+
             const { passwordHash, ...userWithoutPassword } = updatedUser;
 
             return {
-                isNewUser: false,
+                isNewUser: !existingUser,
                 requireOtp: false,
-                user: userWithoutPassword,
-                token: appToken,
+                user: {
+                    ...userWithoutPassword,
+                    staffRole,
+                },
+                token: data.session?.access_token || appToken,
+                appToken,
+                refreshToken,
+                message: t('auth.login_success', {}, lang),
             };
         } catch (error: any) {
             if (error instanceof AppError) throw error;
@@ -406,7 +413,6 @@ export const authService = {
             const fullName = user.user_metadata.full_name || user.user_metadata.name || "Google User";
             const phoneNumber = user.user_metadata.phone_number || user.phone || null;
 
-            // Cek apakah pengguna sudah pernah terdaftar sebelumnya
             const existingUser = await db.orm.core_auth.User.where({ email: user.email! }).first();
 
             const updatedUser = await db.orm.core_auth.User.upsert({
@@ -423,33 +429,25 @@ export const authService = {
                 conflictOn: { email: user.email! },
             });
 
-            const { isVerified } = checkUserVerification(user, existingUser);
-
-            // Jika user belum terverifikasi via OTP, kirim OTP verifikasi dan minta verifikasi OTP
-            if (!isVerified) {
-                const { error: otpErr } = await supabase.auth.signInWithOtp({
-                    email: user.email!,
-                    options: {
-                        shouldCreateUser: false,
-                    }
-                });
-
-                if (otpErr) {
-                    console.error("❌ Gagal mengirimkan email OTP untuk user Google baru:", otpErr.message);
-                }
-
-                const { passwordHash, ...userWithoutPassword } = updatedUser;
-
-                return {
-                    isNewUser: true,
-                    requireOtp: true,
-                    email: user.email!,
-                    user: userWithoutPassword,
-                    message: t('auth.register_otp_sent', {}, lang),
-                };
+            if (updatedUser.isDeleted) {
+                throw new AppError(t('auth.account_disabled', {}, lang), 400);
             }
 
-            // Jika user lama (login biasa via Google)
+            let staffRole: string | null = null;
+            try {
+                const staffRes = await pool.query(
+                    `SELECT role FROM store.agents
+                     WHERE (linked_user_id = $1 OR LOWER(email) = LOWER($2))
+                       AND status = 'ACTIVE'
+                       AND COALESCE(source_channel, 'TIJARAH') <> 'HSIS_SYNC'
+                     LIMIT 1`,
+                    [updatedUser.id, updatedUser.email || '']
+                );
+                staffRole = staffRes.rows[0]?.role ? String(staffRes.rows[0].role).toUpperCase() : null;
+            } catch {
+                staffRole = null;
+            }
+
             const appToken = jwt.sign(
                 {
                     userId: updatedUser.id,
@@ -460,13 +458,24 @@ export const authService = {
                 { expiresIn: (env.JWT_EXPIRES_IN || '1d') as jwt.SignOptions['expiresIn'] }
             );
 
+            const refreshToken = jwt.sign(
+                { userId: updatedUser.id, email: updatedUser.email, type: 'refresh' },
+                env.JWT_SECRET,
+                { expiresIn: '7d' }
+            );
+
             const { passwordHash, ...userWithoutPassword } = updatedUser;
 
             return {
-                isNewUser: false,
+                isNewUser: !existingUser,
                 requireOtp: false,
-                user: userWithoutPassword,
+                user: {
+                    ...userWithoutPassword,
+                    staffRole,
+                },
                 token: appToken,
+                appToken,
+                refreshToken,
             };
         } catch (error: any) {
             if (error instanceof AppError) {
@@ -671,18 +680,15 @@ export const authService = {
     },
     async authHashHandler(accessToken: string, refreshToken: string, lang: SupportedLanguage = 'id') {
         try {
-            const { data: authData, error } = await supabase.auth.setSession({
-                access_token: accessToken,
-                refresh_token: refreshToken,
-            });
+            const { data: userData, error } = await supabase.auth.getUser(accessToken);
 
-            if (error || !authData.user) {
+            if (error || !userData.user) {
                 const rawMsg = error?.message;
                 const translatedMsg = translateSupabaseError(rawMsg, lang) || rawMsg || 'Sesi tidak valid';
                 throw new AppError(t('auth.verify_otp_failed', { message: translatedMsg }, lang), 400);
             }
 
-            const user = authData.user;
+            const user = userData.user;
             const fullName = user.user_metadata.full_name || user.user_metadata.name || "User";
             const phoneNumber = user.user_metadata.phone_number || user.phone || null;
 
@@ -704,10 +710,23 @@ export const authService = {
                 conflictOn: { email: user.email! },
             });
 
-            const { isVerified } = checkUserVerification(user, existingUser);
-
             if (updatedUser.isDeleted) {
                 throw new AppError(t('auth.account_disabled', {}, lang), 400);
+            }
+
+            let staffRole: string | null = null;
+            try {
+                const staffRes = await pool.query(
+                    `SELECT role FROM store.agents
+                     WHERE (linked_user_id = $1 OR LOWER(email) = LOWER($2))
+                       AND status = 'ACTIVE'
+                       AND COALESCE(source_channel, 'TIJARAH') <> 'HSIS_SYNC'
+                     LIMIT 1`,
+                    [updatedUser.id, updatedUser.email || '']
+                );
+                staffRole = staffRes.rows[0]?.role ? String(staffRes.rows[0].role).toUpperCase() : null;
+            } catch {
+                staffRole = null;
             }
 
             // Langsung terbitkan JWT appToken untuk Google OAuth (Tanpa perlu langkah OTP tambahan)
@@ -721,14 +740,26 @@ export const authService = {
                 { expiresIn: (env.JWT_EXPIRES_IN || '1d') as jwt.SignOptions['expiresIn'] }
             );
 
+            const nextRefreshToken =
+                refreshToken ||
+                jwt.sign(
+                    { userId: updatedUser.id, email: updatedUser.email, type: 'refresh' },
+                    env.JWT_SECRET,
+                    { expiresIn: '7d' }
+                );
+
             const { passwordHash, ...userWithoutPassword } = updatedUser;
 
             return {
                 isNewUser: !existingUser,
                 requireOtp: false,
-                user: userWithoutPassword,
-                token: authData.session?.access_token || appToken,
+                user: {
+                    ...userWithoutPassword,
+                    staffRole,
+                },
+                token: accessToken || appToken,
                 appToken,
+                refreshToken: nextRefreshToken,
                 message: t('auth.login_success', {}, lang),
             };
         } catch (error: any) {
