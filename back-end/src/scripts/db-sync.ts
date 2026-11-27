@@ -96,6 +96,8 @@ async function main() {
     console.error('❌ [db-sync] DATABASE_URL / DIRECT_URL belum dikonfigurasi.');
     process.exit(1);
   }
+  // Gunakan koneksi session-mode (DIRECT_URL) untuk seluruh DDL & seeding
+  process.env.DATABASE_URL = targetUrl;
 
   console.log('🔄 [db-sync] Memeriksa kesiapan schema & migrasi database...');
 
@@ -159,10 +161,33 @@ async function main() {
     await client.end().catch(() => {});
   }
 
-  // Pastikan seluruh tabel store.* & kolom tambahan ERP siap sebelum server menerima request
+  // Pastikan seluruh tabel store.*, trigger auth.users -> core_auth.users, & kolom tambahan ERP siap
   const { ensureSchemaColumns } = await import('../utils/schemaGuard');
   await ensureSchemaColumns();
-  console.log('✅ [db-sync] Seluruh tabel ERP, RBAC, dan kolom tambahan siap.');
+  console.log('✅ [db-sync] Seluruh tabel ERP, trigger auth.users, RBAC, dan kolom tambahan siap.');
+
+  // Auto-seed data master awal (berita, produk awal, pengiriman, super admin) jika tabel masih kosong
+  const verifyClient = new Client({ connectionString: targetUrl });
+  await verifyClient.connect();
+  let needsInitialSeed = process.env.AUTO_SEED === 'true';
+  try {
+    const newsCnt = await verifyClient.query(`SELECT COUNT(*)::int AS cnt FROM store.news`);
+    const prodCnt = await verifyClient.query(`SELECT COUNT(*)::int AS cnt FROM products.products`);
+    if (Number(newsCnt.rows[0]?.cnt || 0) === 0 || Number(prodCnt.rows[0]?.cnt || 0) === 0) {
+      needsInitialSeed = true;
+    }
+  } catch {
+    needsInitialSeed = true;
+  } finally {
+    await verifyClient.end().catch(() => {});
+  }
+
+  if (needsInitialSeed) {
+    console.log('🌱 [db-sync] Data awal belum terisi. Menjalankan seeder otomatis...');
+    const { runDatabaseSeed } = await import('../prisma/seed');
+    await runDatabaseSeed({ reset: false, closeDb: true });
+  }
+
   process.exit(0);
 }
 

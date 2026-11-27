@@ -350,8 +350,8 @@ async function seedConstantMasterData() {
   console.log('✅ Constant & initial master data seeded.');
 }
 
-async function main() {
-  const isReset = process.argv.includes('--reset');
+export async function runDatabaseSeed(options: { reset?: boolean; closeDb?: boolean } = {}) {
+  const isReset = Boolean(options.reset);
   console.log(`🚀 Starting Tijarah Seeder (${env.NODE_ENV})...`);
 
   if (isReset) {
@@ -364,11 +364,19 @@ async function main() {
   await seedConstantMasterData();
 
   console.log('🎉 Seeding complete.');
-  await db.close();
+  if (options.closeDb) {
+    await db.close();
+  }
 }
 
-if (typeof require !== 'undefined' && require.main === module) {
-  main().catch((err) => {
+const scriptArg = (process.argv[1] || '').replace(/\\/g, '/');
+const isMainModule =
+  scriptArg.endsWith('prisma/seed.ts') ||
+  scriptArg.endsWith('prisma/seed.js') ||
+  (typeof require !== 'undefined' && require.main === module);
+
+if (isMainModule) {
+  runDatabaseSeed({ reset: process.argv.includes('--reset'), closeDb: true }).catch((err) => {
     console.error('❌ Seeder error:', err);
     process.exit(1);
   });

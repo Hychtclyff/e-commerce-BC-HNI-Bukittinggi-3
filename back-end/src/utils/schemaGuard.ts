@@ -1,24 +1,44 @@
+import { Client } from "pg";
 import { pool } from "@/prisma/db";
 import { ensureRbacSeeded } from "./rbacSeeder";
 
 /**
- * Ensures database columns required by Prisma contract exist idempotently.
- * Prevents runtime errors when local/staging DBs lag behind contract.prisma.
+ * Ensures database schemas, ERP store tables, columns, auth.users <-> core_auth.users
+ * sync trigger, and linking indexes exist idempotently (one SQL command per query).
  */
 export async function ensureSchemaColumns(): Promise<void> {
-  try {
-    await pool.query(`
-      CREATE SCHEMA IF NOT EXISTS store;
-      CREATE SCHEMA IF NOT EXISTS core_auth;
-      CREATE SCHEMA IF NOT EXISTS orders;
-      CREATE SCHEMA IF NOT EXISTS products;
-      CREATE SCHEMA IF NOT EXISTS promotions;
-      CREATE SCHEMA IF NOT EXISTS b2b_credit;
-      CREATE SCHEMA IF NOT EXISTS notifications;
-    `);
+  const directUrl = (process.env.DIRECT_URL || process.env.DATABASE_URL || "").trim();
+  let directClient: Client | null = null;
 
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS store.agents (
+  if (directUrl) {
+    try {
+      directClient = new Client({ connectionString: directUrl });
+      await directClient.connect();
+    } catch {
+      directClient = null;
+    }
+  }
+
+  const execSql = async (sql: string) => {
+    const clean = sql.trim().replace(/;+\s*$/, "");
+    if (!clean) return;
+    if (directClient) {
+      await directClient.query(clean);
+    } else {
+      await pool.query(clean);
+    }
+  };
+
+  try {
+    const bootstrapStatements = [
+      `CREATE SCHEMA IF NOT EXISTS store`,
+      `CREATE SCHEMA IF NOT EXISTS core_auth`,
+      `CREATE SCHEMA IF NOT EXISTS orders`,
+      `CREATE SCHEMA IF NOT EXISTS products`,
+      `CREATE SCHEMA IF NOT EXISTS promotions`,
+      `CREATE SCHEMA IF NOT EXISTS b2b_credit`,
+      `CREATE SCHEMA IF NOT EXISTS notifications`,
+      `CREATE TABLE IF NOT EXISTS store.agents (
         id VARCHAR(64) PRIMARY KEY,
         name VARCHAR(255) NOT NULL,
         hni_id VARCHAR(80),
@@ -38,9 +58,8 @@ export async function ensureSchemaColumns(): Promise<void> {
         last_login TIMESTAMPTZ,
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-      );
-
-      CREATE TABLE IF NOT EXISTS store.devices (
+      )`,
+      `CREATE TABLE IF NOT EXISTS store.devices (
         id VARCHAR(64) PRIMARY KEY,
         name VARCHAR(150) NOT NULL,
         type VARCHAR(60),
@@ -56,9 +75,8 @@ export async function ensureSchemaColumns(): Promise<void> {
         last_ping TIMESTAMPTZ,
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-      );
-
-      CREATE TABLE IF NOT EXISTS store.delivery_methods (
+      )`,
+      `CREATE TABLE IF NOT EXISTS store.delivery_methods (
         id VARCHAR(64) PRIMARY KEY,
         name VARCHAR(150) NOT NULL,
         code VARCHAR(80) NOT NULL,
@@ -76,9 +94,8 @@ export async function ensureSchemaColumns(): Promise<void> {
         provider_code VARCHAR(40),
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-      );
-
-      CREATE TABLE IF NOT EXISTS store.news (
+      )`,
+      `CREATE TABLE IF NOT EXISTS store.news (
         id VARCHAR(64) PRIMARY KEY,
         title VARCHAR(255) NOT NULL,
         title_en VARCHAR(255),
@@ -96,9 +113,8 @@ export async function ensureSchemaColumns(): Promise<void> {
         published_at TIMESTAMPTZ DEFAULT NOW(),
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-      );
-
-      CREATE TABLE IF NOT EXISTS store.merchants (
+      )`,
+      `CREATE TABLE IF NOT EXISTS store.merchants (
         id VARCHAR(64) PRIMARY KEY,
         name VARCHAR(255) NOT NULL,
         code VARCHAR(80),
@@ -110,9 +126,8 @@ export async function ensureSchemaColumns(): Promise<void> {
         profit_share_rate DOUBLE PRECISION DEFAULT 10,
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-      );
-
-      CREATE TABLE IF NOT EXISTS store.non_hni_products (
+      )`,
+      `CREATE TABLE IF NOT EXISTS store.non_hni_products (
         id VARCHAR(64) PRIMARY KEY,
         merchant_id VARCHAR(64),
         name VARCHAR(255) NOT NULL,
@@ -123,9 +138,8 @@ export async function ensureSchemaColumns(): Promise<void> {
         unit VARCHAR(40) DEFAULT 'PCS',
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-      );
-
-      CREATE TABLE IF NOT EXISTS store.esignatures (
+      )`,
+      `CREATE TABLE IF NOT EXISTS store.esignatures (
         id VARCHAR(64) PRIMARY KEY,
         user_id VARCHAR(255),
         staff_id VARCHAR(255),
@@ -137,9 +151,8 @@ export async function ensureSchemaColumns(): Promise<void> {
         signature_image TEXT,
         status VARCHAR(40) DEFAULT 'ACTIVE',
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-      );
-
-      CREATE TABLE IF NOT EXISTS store.product_knowledge (
+      )`,
+      `CREATE TABLE IF NOT EXISTS store.product_knowledge (
         id VARCHAR(64) PRIMARY KEY,
         product_id VARCHAR(64),
         name VARCHAR(255) NOT NULL,
@@ -154,9 +167,8 @@ export async function ensureSchemaColumns(): Promise<void> {
         gallery_urls TEXT[] DEFAULT '{}',
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-      );
-
-      CREATE TABLE IF NOT EXISTS store.product_testimonials (
+      )`,
+      `CREATE TABLE IF NOT EXISTS store.product_testimonials (
         id VARCHAR(64) PRIMARY KEY,
         product_id VARCHAR(64) NOT NULL,
         author_name VARCHAR(150) NOT NULL,
@@ -164,9 +176,8 @@ export async function ensureSchemaColumns(): Promise<void> {
         rating INTEGER NOT NULL DEFAULT 5,
         comment TEXT,
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-      );
-
-      CREATE TABLE IF NOT EXISTS store.hsis_endpoints (
+      )`,
+      `CREATE TABLE IF NOT EXISTS store.hsis_endpoints (
         id VARCHAR(64) PRIMARY KEY,
         name VARCHAR(150) NOT NULL,
         route VARCHAR(255) NOT NULL,
@@ -178,9 +189,8 @@ export async function ensureSchemaColumns(): Promise<void> {
         is_active BOOLEAN NOT NULL DEFAULT true,
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-      );
-
-      CREATE TABLE IF NOT EXISTS store.stock_point_reconciliations (
+      )`,
+      `CREATE TABLE IF NOT EXISTS store.stock_point_reconciliations (
         id VARCHAR(64) PRIMARY KEY,
         product_id VARCHAR(64) NOT NULL,
         physical_stock_before INTEGER NOT NULL DEFAULT 0,
@@ -189,11 +199,8 @@ export async function ensureSchemaColumns(): Promise<void> {
         reason VARCHAR(120),
         notes TEXT,
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-      );
-    `);
-
-    await pool.query(`
-      ALTER TABLE products.products
+      )`,
+      `ALTER TABLE products.products
         ADD COLUMN IF NOT EXISTS is_separable BOOLEAN NOT NULL DEFAULT false,
         ADD COLUMN IF NOT EXISTS default_breakdown_qty INTEGER,
         ADD COLUMN IF NOT EXISTS is_fraction BOOLEAN NOT NULL DEFAULT false,
@@ -201,81 +208,56 @@ export async function ensureSchemaColumns(): Promise<void> {
         ADD COLUMN IF NOT EXISTS allow_agent_price BOOLEAN NOT NULL DEFAULT true,
         ADD COLUMN IF NOT EXISTS reward_points INTEGER NOT NULL DEFAULT 0,
         ADD COLUMN IF NOT EXISTS physical_stock INTEGER NOT NULL DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS point_stock INTEGER NOT NULL DEFAULT 0;
-    `);
-
-    await pool.query(`
-      ALTER TABLE orders.orders
+        ADD COLUMN IF NOT EXISTS point_stock INTEGER NOT NULL DEFAULT 0`,
+      `ALTER TABLE orders.orders
         ADD COLUMN IF NOT EXISTS slug VARCHAR(120),
         ADD COLUMN IF NOT EXISTS invoice_id VARCHAR(120),
         ADD COLUMN IF NOT EXISTS source_channel VARCHAR(40) NOT NULL DEFAULT 'ONLINE',
         ADD COLUMN IF NOT EXISTS hsis_member_id VARCHAR(80),
         ADD COLUMN IF NOT EXISTS hsis_customer_name VARCHAR(255),
-        ADD COLUMN IF NOT EXISTS hsis_sale_type VARCHAR(50);
-    `);
-
-    await pool.query(`
-      CREATE UNIQUE INDEX IF NOT EXISTS orders_slug_key ON orders.orders (slug) WHERE slug IS NOT NULL;
-    `);
-
-    await pool.query(`
-      CREATE UNIQUE INDEX IF NOT EXISTS orders_invoice_id_key ON orders.orders (invoice_id) WHERE invoice_id IS NOT NULL;
-    `);
-
-    await pool.query(`
-      UPDATE orders.orders
-      SET slug = LOWER(REGEXP_REPLACE("orderNumber", '[^a-zA-Z0-9]+', '-', 'g'))
-      WHERE slug IS NULL AND "orderNumber" IS NOT NULL;
-    `);
-
-    await pool.query(`
-      ALTER TABLE promotions.vouchers
+        ADD COLUMN IF NOT EXISTS hsis_sale_type VARCHAR(50)`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS orders_slug_key ON orders.orders (slug) WHERE slug IS NOT NULL`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS orders_invoice_id_key ON orders.orders (invoice_id) WHERE invoice_id IS NOT NULL`,
+      `UPDATE orders.orders
+        SET slug = LOWER(REGEXP_REPLACE("orderNumber", '[^a-zA-Z0-9]+', '-', 'g'))
+        WHERE slug IS NULL AND "orderNumber" IS NOT NULL`,
+      `ALTER TABLE promotions.vouchers
         ADD COLUMN IF NOT EXISTS quota INTEGER NOT NULL DEFAULT 100,
         ADD COLUMN IF NOT EXISTS used_count INTEGER NOT NULL DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS conditions JSONB;
-    `);
-
-    await pool.query(`
-      ALTER TABLE promotions.user_vouchers
-        ADD COLUMN IF NOT EXISTS usage_count INTEGER NOT NULL DEFAULT 0;
-    `);
-
-    await pool.query(`
-      ALTER TABLE store.agents
+        ADD COLUMN IF NOT EXISTS conditions JSONB`,
+      `ALTER TABLE promotions.user_vouchers
+        ADD COLUMN IF NOT EXISTS usage_count INTEGER NOT NULL DEFAULT 0`,
+      `ALTER TABLE store.agents
         ADD COLUMN IF NOT EXISTS source_channel VARCHAR(30) NOT NULL DEFAULT 'TIJARAH',
         ADD COLUMN IF NOT EXISTS is_registered_user BOOLEAN NOT NULL DEFAULT false,
         ADD COLUMN IF NOT EXISTS linked_user_id VARCHAR(255),
         ADD COLUMN IF NOT EXISTS total_orders INTEGER NOT NULL DEFAULT 0,
         ADD COLUMN IF NOT EXISTS total_spent DOUBLE PRECISION NOT NULL DEFAULT 0,
         ADD COLUMN IF NOT EXISTS total_tp_points INTEGER NOT NULL DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS last_transaction_at TIMESTAMPTZ;
-    `);
-
-    await pool.query(`
-      ALTER TABLE store.delivery_methods
+        ADD COLUMN IF NOT EXISTS last_transaction_at TIMESTAMPTZ`,
+      `ALTER TABLE store.delivery_methods
         ADD COLUMN IF NOT EXISTS pricing_mode VARCHAR(30) NOT NULL DEFAULT 'FLAT',
         ADD COLUMN IF NOT EXISTS zone_rates JSONB NOT NULL DEFAULT '[]'::jsonb,
-        ADD COLUMN IF NOT EXISTS provider_code VARCHAR(40);
-    `);
-
-    await pool.query(`
-      ALTER TABLE store.esignatures
+        ADD COLUMN IF NOT EXISTS provider_code VARCHAR(40)`,
+      `ALTER TABLE store.esignatures
         ADD COLUMN IF NOT EXISTS user_id VARCHAR(255),
         ADD COLUMN IF NOT EXISTS staff_id VARCHAR(255),
-        ADD COLUMN IF NOT EXISTS signature_image TEXT;
-    `);
-
-    await pool.query(`
-      ALTER TABLE orders.orders
+        ADD COLUMN IF NOT EXISTS signature_image TEXT`,
+      `ALTER TABLE orders.orders
         ADD COLUMN IF NOT EXISTS acted_by_user_id VARCHAR(255),
         ADD COLUMN IF NOT EXISTS acted_by_name VARCHAR(255),
-        ADD COLUMN IF NOT EXISTS acted_by_signature_code VARCHAR(120);
-    `);
+        ADD COLUMN IF NOT EXISTS acted_by_signature_code VARCHAR(120)`,
+      `ALTER TABLE store.devices
+        ADD COLUMN IF NOT EXISTS location VARCHAR(150)`,
+    ];
 
-    await pool.query(`
-      ALTER TABLE store.devices
-        ADD COLUMN IF NOT EXISTS location VARCHAR(150);
-    `);
+    for (const stmt of bootstrapStatements) {
+      try {
+        await execSql(stmt);
+      } catch (stmtErr: any) {
+        console.warn("[schemaGuard] Bootstrap statement warning:", stmtErr?.message);
+      }
+    }
 
     const ddlStatements = [
       `CREATE TABLE IF NOT EXISTS store.contact_messages (
@@ -578,11 +560,81 @@ export async function ensureSchemaColumns(): Promise<void> {
         ADD COLUMN IF NOT EXISTS refund_confirmed_by_user BOOLEAN NOT NULL DEFAULT FALSE`,
       `ALTER TABLE orders.orders
         ADD COLUMN IF NOT EXISTS refund_confirmed_at TIMESTAMPTZ`,
+      // Indexes penghubung Supabase auth.users <-> core_auth.users <-> store.agents
+      `CREATE INDEX IF NOT EXISTS idx_core_auth_users_email_lower ON core_auth.users (LOWER(email))`,
+      `CREATE INDEX IF NOT EXISTS idx_store_agents_linked_user_id ON store.agents (linked_user_id)`,
+      `CREATE INDEX IF NOT EXISTS idx_store_agents_email_lower ON store.agents (LOWER(email))`,
+      `CREATE INDEX IF NOT EXISTS idx_hni_profiles_user_id ON core_auth.hni_profiles ("userId")`,
+      // Trigger sync otomatis Supabase auth.users -> core_auth.users (Triger Sign Google.sql)
+      `CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS trigger AS $$
+BEGIN
+  INSERT INTO core_auth.users (
+    id,
+    email,
+    "fullName",
+    "phoneNumber",
+    "passwordHash",
+    "userType",
+    "createdAt",
+    "updatedAt"
+  )
+  VALUES (
+    new.id::text,
+    new.email,
+    COALESCE(
+      new.raw_user_meta_data->>'full_name',
+      new.raw_user_meta_data->>'name',
+      split_part(new.email, '@', 1),
+      'User'
+    ),
+    NULLIF(new.raw_user_meta_data->>'phone_number', ''),
+    '',
+    'CUSTOMER',
+    NOW(),
+    NOW()
+  )
+  ON CONFLICT (id) DO UPDATE
+  SET
+    "fullName" = COALESCE(EXCLUDED."fullName", core_auth.users."fullName"),
+    "email" = EXCLUDED."email",
+    "updatedAt" = NOW();
+
+  RETURN new;
+EXCEPTION WHEN OTHERS THEN
+  RAISE WARNING 'handle_new_user failed: %', SQLERRM;
+  RETURN new;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER`,
+      `GRANT USAGE ON SCHEMA core_auth TO postgres, service_role, anon, authenticated`,
+      `GRANT ALL ON ALL TABLES IN SCHEMA core_auth TO postgres, service_role, anon, authenticated`,
+      `DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users`,
+      `CREATE TRIGGER on_auth_user_created
+        AFTER INSERT ON auth.users
+        FOR EACH ROW EXECUTE FUNCTION public.handle_new_user()`,
+      // Backfill existing auth.users yang belum ada di core_auth.users
+      `INSERT INTO core_auth.users (id, email, "fullName", "phoneNumber", "passwordHash", "userType", "createdAt", "updatedAt")
+       SELECT
+         au.id::text,
+         au.email,
+         COALESCE(au.raw_user_meta_data->>'full_name', au.raw_user_meta_data->>'name', split_part(au.email, '@', 1), 'User'),
+         NULLIF(au.raw_user_meta_data->>'phone_number', ''),
+         '',
+         'CUSTOMER',
+         COALESCE(au.created_at, NOW()),
+         NOW()
+       FROM auth.users au
+       WHERE au.email IS NOT NULL
+         AND NOT EXISTS (
+           SELECT 1 FROM core_auth.users cu
+           WHERE cu.id = au.id::text OR LOWER(cu.email) = LOWER(au.email)
+         )
+       ON CONFLICT DO NOTHING`,
     ];
 
     for (const stmt of ddlStatements) {
       try {
-        await pool.query(stmt);
+        await execSql(stmt);
       } catch (stmtErr: any) {
         console.warn("[schemaGuard] Statement warning:", stmtErr?.message);
       }
@@ -591,5 +643,9 @@ export async function ensureSchemaColumns(): Promise<void> {
     await ensureRbacSeeded();
   } catch (err: any) {
     console.warn("[schemaGuard] Skipped schema guard:", err?.message);
+  } finally {
+    if (directClient) {
+      await directClient.end().catch(() => {});
+    }
   }
 }
