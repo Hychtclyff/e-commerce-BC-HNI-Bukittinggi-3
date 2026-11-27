@@ -163,16 +163,16 @@ function mapUserTypeToRoleName(userType?: string | null, staffRole?: string | nu
 
 export async function ensureRbacSeeded(): Promise<void> {
   try {
-    // 1. Seed roles
+    // 1. Seed roles (bulk fetch to avoid N+1 round-trips over cloud latency)
     const roleIdByName = new Map<string, string>();
+    const existingRolesRes = await pool.query(`SELECT id, name FROM core_auth.roles`);
+    for (const row of existingRolesRes.rows) {
+      roleIdByName.set(String(row.name).toLowerCase(), row.id);
+    }
+
     for (const r of SYSTEM_ROLES) {
-      const existing = await pool.query(
-        `SELECT id FROM core_auth.roles WHERE LOWER(name) = LOWER($1) LIMIT 1`,
-        [r.name]
-      );
-      if (existing.rows.length > 0) {
-        roleIdByName.set(r.name, existing.rows[0].id);
-      } else {
+      const key = r.name.toLowerCase();
+      if (!roleIdByName.has(key)) {
         const id = crypto.randomUUID();
         await pool.query(
           `INSERT INTO core_auth.roles (id, name, "displayName", description, "isSystem", "updatedAt")
@@ -181,25 +181,24 @@ export async function ensureRbacSeeded(): Promise<void> {
           [id, r.name, r.displayName, r.description, r.isSystem]
         );
         const created = await pool.query(
-          `SELECT id FROM core_auth.roles WHERE name = $1 LIMIT 1`,
+          `SELECT id FROM core_auth.roles WHERE LOWER(name) = LOWER($1) LIMIT 1`,
           [r.name]
         );
         if (created.rows[0]?.id) {
-          roleIdByName.set(r.name, created.rows[0].id);
+          roleIdByName.set(key, created.rows[0].id);
         }
       }
     }
 
-    // 2. Seed permissions
+    // 2. Seed permissions (bulk fetch to avoid 50+ sequential queries on startup)
     const permIdByCode = new Map<string, string>();
+    const existingPermsRes = await pool.query(`SELECT id, code FROM core_auth.permissions`);
+    for (const row of existingPermsRes.rows) {
+      permIdByCode.set(row.code, row.id);
+    }
+
     for (const p of SYSTEM_PERMISSIONS) {
-      const existing = await pool.query(
-        `SELECT id FROM core_auth.permissions WHERE code = $1 LIMIT 1`,
-        [p.code]
-      );
-      if (existing.rows.length > 0) {
-        permIdByCode.set(p.code, existing.rows[0].id);
-      } else {
+      if (!permIdByCode.has(p.code)) {
         const id = crypto.randomUUID();
         await pool.query(
           `INSERT INTO core_auth.permissions (id, code, "group", description)
@@ -218,15 +217,18 @@ export async function ensureRbacSeeded(): Promise<void> {
     }
 
     // 3. Seed role_permissions ONLY for roles that currently have 0 permissions (preserves custom admin edits)
-    for (const [roleName, permCodes] of Object.entries(ROLE_PERMISSION_MATRIX)) {
-      const roleId = roleIdByName.get(roleName);
-      if (!roleId) continue;
+    const rolePermCountsRes = await pool.query(
+      `SELECT "roleId", COUNT(*)::int AS cnt FROM core_auth.role_permissions GROUP BY "roleId"`
+    );
+    const countByRoleId = new Map<string, number>();
+    for (const row of rolePermCountsRes.rows) {
+      countByRoleId.set(row.roleId, Number(row.cnt || 0));
+    }
 
-      const countRes = await pool.query(
-        `SELECT COUNT(*)::int AS cnt FROM core_auth.role_permissions WHERE "roleId" = $1`,
-        [roleId]
-      );
-      if (Number(countRes.rows[0]?.cnt || 0) > 0) continue;
+    for (const [roleName, permCodes] of Object.entries(ROLE_PERMISSION_MATRIX)) {
+      const roleId = roleIdByName.get(roleName.toLowerCase());
+      if (!roleId) continue;
+      if ((countByRoleId.get(roleId) || 0) > 0) continue;
 
       for (const code of permCodes) {
         const permId = permIdByCode.get(code);
@@ -256,7 +258,7 @@ export async function ensureRbacSeeded(): Promise<void> {
 
     for (const u of usersWithoutRole.rows) {
       const roleName = mapUserTypeToRoleName(u.userType, u.staffRole);
-      const roleId = roleIdByName.get(roleName);
+      const roleId = roleIdByName.get(roleName.toLowerCase());
       if (!roleId) continue;
       await pool.query(
         `INSERT INTO core_auth.user_roles ("userId", "roleId")

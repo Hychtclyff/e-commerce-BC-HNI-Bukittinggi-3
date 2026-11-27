@@ -21,4 +21,4 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=45s --retries=3 \
   CMD wget -qO- http://localhost:5000/health || exit 1
 
 # Auto push DB schema (first run) / apply new migrations before starting Fastify
-CMD ["sh", "-c", "bun run db:sync && exec bun src/index.ts"]
+CMD ["sh", "-c", "bun run db:sync && SKIP_SCHEMA_GUARD_ON_BOOT=true exec bun src/index.ts"]

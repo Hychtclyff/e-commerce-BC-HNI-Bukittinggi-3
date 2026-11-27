@@ -24,6 +24,7 @@ export function buildApp(): FastifyInstance {
   const environment = process.env.NODE_ENV || 'production';
   const app = Fastify({
     logger: envToLogger[environment],
+    pluginTimeout: 60000,
   });
 
   // Hook untuk mencatat semua endpoint yang didaftarkan ke Fastify
@@ -119,7 +120,9 @@ export function buildApp(): FastifyInstance {
   app.register(apiRoutes, { prefix: '/api/v1' });
 
   app.addHook('onReady', async () => {
-    await ensureSchemaColumns();
+    if (process.env.SKIP_SCHEMA_GUARD_ON_BOOT !== 'true') {
+      void ensureSchemaColumns();
+    }
   });
 
   return app;
