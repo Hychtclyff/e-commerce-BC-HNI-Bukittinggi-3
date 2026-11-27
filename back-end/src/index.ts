@@ -5,8 +5,9 @@ import { startPrintQueueCron } from './modules/orders/printQueue';
 
 async function start() {
   try {
-    await app.listen({ port: env.PORT, host: env.HOST });
-    app.log.info(`Server is running at http://${env.HOST}:${env.PORT}`);
+    const listenHost = env.NODE_ENV === 'production' && env.HOST === 'localhost' ? '0.0.0.0' : env.HOST;
+    await app.listen({ port: env.PORT, host: listenHost });
+    app.log.info(`Server is running at http://${listenHost}:${env.PORT}`);
 
     // Poin 11: Background worker auto-cancel order kedaluwarsa & pengembalian stok
     startExpiredOrdersCron(600000); // Tiap 10 menit

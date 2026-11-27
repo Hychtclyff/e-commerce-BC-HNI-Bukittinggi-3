@@ -22,6 +22,10 @@ const nextConfig = {
                 "hostname": "api.qrserver.com"
             },
             {
+                "protocol": "https",
+                "hostname": "e-commerce-bc-hni-bukittinggi-3.onrender.com"
+            },
+            {
                 "protocol": "http",
                 "hostname": "127.0.0.1"
             },

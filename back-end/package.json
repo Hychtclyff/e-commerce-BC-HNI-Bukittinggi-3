@@ -11,6 +11,9 @@
     "test": "bun test",
     "postinstall": "prisma skills sync || exit 0",
     "contract:emit": "prisma contract emit",
+    "db:push": "prisma contract emit && prisma db update --no-interactive",
+    "db:migrate": "prisma db migrate --no-interactive",
+    "db:sync": "bun src/scripts/db-sync.ts",
     "seed": "bun src/prisma/seed.ts",
     "seed:reset": "bun src/prisma/seed.ts --reset"
   },

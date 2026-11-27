@@ -8,6 +8,191 @@ import { ensureRbacSeeded } from "./rbacSeeder";
 export async function ensureSchemaColumns(): Promise<void> {
   try {
     await pool.query(`
+      CREATE SCHEMA IF NOT EXISTS store;
+      CREATE SCHEMA IF NOT EXISTS core_auth;
+      CREATE SCHEMA IF NOT EXISTS orders;
+      CREATE SCHEMA IF NOT EXISTS products;
+      CREATE SCHEMA IF NOT EXISTS promotions;
+      CREATE SCHEMA IF NOT EXISTS b2b_credit;
+      CREATE SCHEMA IF NOT EXISTS notifications;
+    `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS store.agents (
+        id VARCHAR(64) PRIMARY KEY,
+        name VARCHAR(255) NOT NULL,
+        hni_id VARCHAR(80),
+        phone VARCHAR(60),
+        email VARCHAR(150),
+        rank VARCHAR(60) DEFAULT 'AB',
+        tier VARCHAR(60) DEFAULT 'BC_3',
+        status VARCHAR(40) DEFAULT 'ACTIVE',
+        role VARCHAR(60) DEFAULT 'AGEN_HNI',
+        source_channel VARCHAR(30) NOT NULL DEFAULT 'TIJARAH',
+        is_registered_user BOOLEAN NOT NULL DEFAULT false,
+        linked_user_id VARCHAR(255),
+        total_orders INTEGER NOT NULL DEFAULT 0,
+        total_spent DOUBLE PRECISION NOT NULL DEFAULT 0,
+        total_tp_points INTEGER NOT NULL DEFAULT 0,
+        last_transaction_at TIMESTAMPTZ,
+        last_login TIMESTAMPTZ,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+
+      CREATE TABLE IF NOT EXISTS store.devices (
+        id VARCHAR(64) PRIMARY KEY,
+        name VARCHAR(150) NOT NULL,
+        type VARCHAR(60),
+        device_type VARCHAR(60),
+        model VARCHAR(120),
+        paper_width VARCHAR(30) DEFAULT '80mm',
+        connection_type VARCHAR(40) DEFAULT 'USB',
+        ip_address VARCHAR(80),
+        port INTEGER DEFAULT 9100,
+        location VARCHAR(150) DEFAULT 'Meja Kasir',
+        status VARCHAR(40) DEFAULT 'OFFLINE',
+        is_default BOOLEAN DEFAULT false,
+        last_ping TIMESTAMPTZ,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+
+      CREATE TABLE IF NOT EXISTS store.delivery_methods (
+        id VARCHAR(64) PRIMARY KEY,
+        name VARCHAR(150) NOT NULL,
+        code VARCHAR(80) NOT NULL,
+        type VARCHAR(60) DEFAULT 'TRAVEL_EXPEDITION',
+        verification_flow VARCHAR(60) DEFAULT 'USER_VERIFY_DIRECT',
+        description TEXT,
+        is_active BOOLEAN NOT NULL DEFAULT true,
+        estimated_time VARCHAR(80),
+        estimated_days VARCHAR(80),
+        base_cost DOUBLE PRECISION NOT NULL DEFAULT 0,
+        base_fee DOUBLE PRECISION NOT NULL DEFAULT 0,
+        destination_area VARCHAR(100),
+        pricing_mode VARCHAR(30) NOT NULL DEFAULT 'FLAT',
+        zone_rates JSONB NOT NULL DEFAULT '[]'::jsonb,
+        provider_code VARCHAR(40),
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+
+      CREATE TABLE IF NOT EXISTS store.news (
+        id VARCHAR(64) PRIMARY KEY,
+        title VARCHAR(255) NOT NULL,
+        title_en VARCHAR(255),
+        slug VARCHAR(255),
+        summary TEXT,
+        summary_en TEXT,
+        content TEXT,
+        content_en TEXT,
+        category VARCHAR(80) DEFAULT 'INFO',
+        tags TEXT[] DEFAULT '{}',
+        tagged_product_ids JSONB NOT NULL DEFAULT '[]'::jsonb,
+        thumbnail_url TEXT,
+        status VARCHAR(40) DEFAULT 'PUBLISHED',
+        author_name VARCHAR(150),
+        published_at TIMESTAMPTZ DEFAULT NOW(),
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+
+      CREATE TABLE IF NOT EXISTS store.merchants (
+        id VARCHAR(64) PRIMARY KEY,
+        name VARCHAR(255) NOT NULL,
+        code VARCHAR(80),
+        type VARCHAR(60) DEFAULT 'BRANCH',
+        phone VARCHAR(60),
+        address TEXT,
+        pic_name VARCHAR(150),
+        status VARCHAR(40) DEFAULT 'ACTIVE',
+        profit_share_rate DOUBLE PRECISION DEFAULT 10,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+
+      CREATE TABLE IF NOT EXISTS store.non_hni_products (
+        id VARCHAR(64) PRIMARY KEY,
+        merchant_id VARCHAR(64),
+        name VARCHAR(255) NOT NULL,
+        sku VARCHAR(120),
+        category VARCHAR(100),
+        price DOUBLE PRECISION NOT NULL DEFAULT 0,
+        stock INTEGER NOT NULL DEFAULT 0,
+        unit VARCHAR(40) DEFAULT 'PCS',
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+
+      CREATE TABLE IF NOT EXISTS store.esignatures (
+        id VARCHAR(64) PRIMARY KEY,
+        user_id VARCHAR(255),
+        staff_id VARCHAR(255),
+        title VARCHAR(255),
+        signer_name VARCHAR(255) NOT NULL,
+        signer_role VARCHAR(100),
+        verification_code VARCHAR(120),
+        payload_hash VARCHAR(255),
+        signature_image TEXT,
+        status VARCHAR(40) DEFAULT 'ACTIVE',
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+
+      CREATE TABLE IF NOT EXISTS store.product_knowledge (
+        id VARCHAR(64) PRIMARY KEY,
+        product_id VARCHAR(64),
+        name VARCHAR(255) NOT NULL,
+        hni_code VARCHAR(80),
+        category VARCHAR(100),
+        benefits TEXT[] DEFAULT '{}',
+        composition TEXT[] DEFAULT '{}',
+        bpom_number VARCHAR(120),
+        halal_status VARCHAR(120),
+        usage_guidelines TEXT,
+        image_url TEXT,
+        gallery_urls TEXT[] DEFAULT '{}',
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+
+      CREATE TABLE IF NOT EXISTS store.product_testimonials (
+        id VARCHAR(64) PRIMARY KEY,
+        product_id VARCHAR(64) NOT NULL,
+        author_name VARCHAR(150) NOT NULL,
+        author_rank VARCHAR(100),
+        rating INTEGER NOT NULL DEFAULT 5,
+        comment TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+
+      CREATE TABLE IF NOT EXISTS store.hsis_endpoints (
+        id VARCHAR(64) PRIMARY KEY,
+        name VARCHAR(150) NOT NULL,
+        route VARCHAR(255) NOT NULL,
+        method VARCHAR(20) NOT NULL DEFAULT 'GET',
+        description TEXT,
+        controller VARCHAR(120) NOT NULL,
+        handler_action VARCHAR(120) NOT NULL,
+        headers JSONB DEFAULT '{}'::jsonb,
+        is_active BOOLEAN NOT NULL DEFAULT true,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+
+      CREATE TABLE IF NOT EXISTS store.stock_point_reconciliations (
+        id VARCHAR(64) PRIMARY KEY,
+        product_id VARCHAR(64) NOT NULL,
+        physical_stock_before INTEGER NOT NULL DEFAULT 0,
+        point_stock_before INTEGER NOT NULL DEFAULT 0,
+        adjusted_point INTEGER NOT NULL DEFAULT 0,
+        reason VARCHAR(120),
+        notes TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+    `);
+
+    await pool.query(`
       ALTER TABLE products.products
         ADD COLUMN IF NOT EXISTS is_separable BOOLEAN NOT NULL DEFAULT false,
         ADD COLUMN IF NOT EXISTS default_breakdown_qty INTEGER,

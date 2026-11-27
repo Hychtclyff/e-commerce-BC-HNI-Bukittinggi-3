@@ -27,6 +27,7 @@ const envSchema = z.object({
   XENDIT_WEBHOOK_TOKEN: z.string().optional(),
   FRONTEND_URL: z.string().default('http://localhost:3000'),
   BACKEND_URL: z.string().default('http://localhost:5000'),
+  CORS_ORIGINS: z.string().optional(),
   SMTP_HOST: z.string().optional().default('smtp.gmail.com'),
   SMTP_PORT: z.coerce.number().optional().default(587),
   SMTP_USER: z.string().optional(),
